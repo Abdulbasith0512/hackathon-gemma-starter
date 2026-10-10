@@ -4,13 +4,24 @@ import gradio as gr
 
 import gemma
 import prompts
+from task import TASK
 from utils import format_error, parse_model_json
+
+
+def ask_model(task, text, image):
+    """Task config -> prompt builder -> provider. Returns the raw model response."""
+    system_prompt = prompts.build_prompt(task.instructions, task.output_schema, task.example)
+    user_prompt = prompts.build_user_prompt(text, has_image=image is not None)
+    if image is not None:
+        return gemma.generate_multimodal(user_prompt, image, system_prompt)
+    return gemma.generate_text(user_prompt, system_prompt)
 
 
 def analyze(text, image):
     """Generator, so the UI can show a loading state before the model answers.
 
-    Yields (status, result, raw_response, button_update).
+    Runs the active task (`TASK`, read at call time). Yields (status, result,
+    raw_response, button_update).
     """
     text = (text or "").strip()
     if not text and image is None:
@@ -22,12 +33,9 @@ def analyze(text, image):
 
     raw = ""
     try:
-        user_prompt = prompts.build_user_prompt(text, has_image=image is not None)
-        if image is not None:
-            raw = gemma.generate_multimodal(user_prompt, image, prompts.SYSTEM_PROMPT)
-        else:
-            raw = gemma.generate_text(user_prompt, prompts.SYSTEM_PROMPT)
-        result = parse_model_json(raw)
+        task = TASK
+        raw = ask_model(task, text, image)
+        result = parse_model_json(raw, task.output_schema)
     except (gemma.GemmaError, ValueError) as e:
         # `raw` is still shown so a bad-JSON response can be inspected.
         yield f"Error: {format_error(e)}", None, raw, gr.update(interactive=True)
@@ -37,7 +45,9 @@ def analyze(text, image):
 
 
 with gr.Blocks(title="Gemma 4 Hackathon Starter") as demo:
-    gr.Markdown("# Gemma 4 Hackathon Starter\nEnter text, upload an image, or both.")
+    gr.Markdown(
+        f"# Gemma 4 Hackathon Starter\nTask: {TASK.name}\n\nEnter text, upload an image, or both."
+    )
     with gr.Row():
         with gr.Column():
             text_in = gr.Textbox(label="Text", lines=5, placeholder="Describe the situation or ask a question...")

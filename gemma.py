@@ -3,6 +3,9 @@
 This is the only file that talks to the model provider. To swap models or
 providers later, keep the two public functions (generate_text,
 generate_multimodal) and change what happens inside.
+
+It is task-agnostic: it sends whatever prompt and system instruction the caller
+supplies and returns the raw text. It knows nothing about tasks or output schemas.
 """
 
 import io

@@ -1,32 +1,54 @@
-"""Prompt constants and helpers. Edit this file when the challenge is revealed.
+"""Generic prompt building. Task-specific content lives in task.py, not here."""
 
-If you change the output schema here, change REQUIRED_FIELDS in utils.py to match.
-"""
+import json
 
-# Sent as the model's system instruction on every request.
-SYSTEM_PROMPT = """\
-ROLE: You are a careful analysis assistant.
+DEFAULT_ROLE = "You are a careful analysis assistant."
 
-TASK: Analyze the user's input (text, an image, or both) and produce a short, \
-useful analysis: a one-paragraph summary and a list of concrete next steps.
+INPUT_NOTE = (
+    "The user's message may contain text, an image, or both. "
+    "Base your answer only on what is provided."
+)
 
-OUTPUT FORMAT: Respond with ONLY a single valid JSON object, with no markdown \
-fences and no text before or after it. Use exactly this schema:
-
-{
-  "summary": "string - concise summary of the input and your analysis",
-  "steps": ["string - one concrete step per item, in order"],
-  "confidence": 0.0
-}
-
-RULES:
+# Rules that apply to every task. Task-specific rules belong in the task instructions.
+RULES = """\
 - Be concise. Prefer short sentences.
-- "confidence" is a number from 0.0 (guessing) to 1.0 (certain).
-- If the input is ambiguous, incomplete, or you are unsure, say so in "summary" \
-and lower "confidence". Do not invent details.
-- If there is nothing to do, return "steps": [].
-- The response must be valid JSON: double-quoted keys and strings, no trailing commas.
-"""
+- Use exactly the keys shown in the schema. Do not add, rename, or drop keys.
+- If the input is ambiguous, incomplete, or you are unsure, say so plainly. Do not invent details.
+- The response must be valid JSON: double-quoted keys and strings, no trailing commas."""
+
+
+def build_prompt(
+    task_instructions: str,
+    output_schema: dict,
+    example: dict | None = None,
+    role: str = DEFAULT_ROLE,
+) -> str:
+    """Assemble the system prompt: role, task, input, output format, rules, example.
+
+    `example`, if given, is {"input": ..., "output": ...}.
+    """
+    if not task_instructions or not task_instructions.strip():
+        raise ValueError("task_instructions must not be empty.")
+    if not isinstance(output_schema, dict) or not output_schema:
+        raise ValueError("output_schema must be a non-empty dict.")
+
+    parts = [
+        f"ROLE: {role}",
+        f"TASK: {task_instructions.strip()}",
+        f"INPUT: {INPUT_NOTE}",
+        "OUTPUT FORMAT: Respond with ONLY a single valid JSON object, with no markdown "
+        "fences and no text before or after it. Use exactly this schema:\n\n"
+        + json.dumps(output_schema, indent=2),
+        f"RULES:\n{RULES}",
+    ]
+    if example is not None:
+        if not (isinstance(example, dict) and {"input", "output"} <= example.keys()):
+            raise ValueError("example must be a dict with 'input' and 'output' keys.")
+        out = example["output"]
+        out_text = out if isinstance(out, str) else json.dumps(out, indent=2)
+        parts.append(f"EXAMPLE:\nInput: {example['input']}\nOutput:\n{out_text}")
+    return "\n\n".join(parts) + "\n"
+
 
 # User-turn prompts for each input mode.
 TEXT_ONLY = "{text}"
