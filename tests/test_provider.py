@@ -1,15 +1,29 @@
-"""The provider (gemma.py) must work for any prompt and know nothing about the task."""
+"""The provider (gemma.py) must work for any prompt and know nothing about the task.
+
+Latency settings have their own files: test_provider_thinking.py,
+test_provider_images.py, test_provider_retries.py.
+"""
 
 import ast
+import inspect
 import os
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from google.genai import errors
+from google import genai
+from google.genai import errors, types
+from PIL import Image, ImageChops
 
 import gemma
-from tests.helpers import FakeClient, patch_client, tiny_image
+from tests.helpers import (
+    FakeClient,
+    ProviderTestCase,
+    decode_part,
+    patch_client,
+    screenshot_like,
+    tiny_image,
+)
 
 GEMMA_SOURCE = Path(gemma.__file__)
 
@@ -31,7 +45,7 @@ class ProviderSeparationTests(unittest.TestCase):
             self.assertNotIn(term, source)
 
 
-class ProviderRequestTests(unittest.TestCase):
+class ProviderRequestTests(ProviderTestCase):
     def test_text_request_passes_arbitrary_prompt_through(self):
         client = FakeClient("hello back")
         with patch_client(client):
@@ -60,15 +74,61 @@ class ProviderRequestTests(unittest.TestCase):
         self.assertEqual(client.calls[0].config.system_instruction, "sys")
 
     def test_multimodal_accepts_non_rgb_images(self):
-        from PIL import Image
-
         client = FakeClient("ok")
         with patch_client(client):
             gemma.generate_multimodal("p", Image.new("RGBA", (4, 4), (0, 0, 0, 0)))
         self.assertEqual(client.calls[0].contents[0].inline_data.mime_type, "image/png")
 
 
-class ProviderErrorTests(unittest.TestCase):
+class BackwardCompatibilityTests(ProviderTestCase):
+    """Everything callers relied on before the latency changes still holds."""
+
+    def test_public_api_is_unchanged(self):
+        text_params = list(inspect.signature(gemma.generate_text).parameters)
+        multimodal_params = list(inspect.signature(gemma.generate_multimodal).parameters)
+        self.assertEqual(text_params, ["prompt", "system_instruction"])
+        self.assertEqual(multimodal_params, ["prompt", "image", "system_instruction"])
+        for name in ("GemmaError", "DEFAULT_MODEL", "get_model", "get_client"):
+            self.assertTrue(hasattr(gemma, name), name)
+
+    def test_works_with_no_new_settings_at_all(self):
+        # GEMMA_THINKING unset (as in an old .env): requests succeed, minimal thinking.
+        client = FakeClient("fine")
+        with patch_client(client):
+            self.assertEqual(gemma.generate_text("hi"), "fine")
+        thinking = client.calls[0].config.thinking_config
+        self.assertEqual(thinking.thinking_level, types.ThinkingLevel.MINIMAL)
+
+    def test_get_client_still_returns_an_sdk_client(self):
+        self.assertIsInstance(gemma.get_client(), genai.Client)
+
+    def test_text_only_request_has_no_image(self):
+        client = FakeClient("ok")
+        with patch_client(client):
+            gemma.generate_text("just text", "sys")
+        (call,) = client.calls
+        self.assertEqual(call.contents, ["just text"])
+        self.assertEqual(call.config.system_instruction, "sys")
+
+    def test_image_comes_before_the_prompt_text(self):
+        client = FakeClient("ok")
+        with patch_client(client):
+            gemma.generate_multimodal("the prompt", tiny_image())
+        image_part, prompt = client.calls[0].contents
+        self.assertIsNotNone(image_part.inline_data)
+        self.assertEqual(prompt, "the prompt")
+
+    def test_small_images_keep_their_size_and_stay_lossless(self):
+        # Under the size limit, a flat image is sent exactly as before: PNG, same pixels.
+        for original in (tiny_image(), screenshot_like(800, 600)):
+            part = gemma._to_image_part(original)
+            sent = decode_part(part)
+            self.assertEqual(part.inline_data.mime_type, "image/png")
+            self.assertEqual(sent.size, original.size)
+            self.assertIsNone(ImageChops.difference(sent.convert("RGB"), original).getbbox())
+
+
+class ProviderErrorTests(ProviderTestCase):
     def test_api_error_becomes_gemma_error(self):
         client = FakeClient()
         client.generate_content = mock.Mock(
@@ -92,6 +152,11 @@ class ProviderErrorTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": value}):
                 with self.assertRaisesRegex(gemma.GemmaError, "GOOGLE_API_KEY"):
                     gemma.get_client()
+
+    def test_missing_key_is_reported_before_any_request(self):
+        with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": ""}):
+            with self.assertRaisesRegex(gemma.GemmaError, "GOOGLE_API_KEY"):
+                gemma.generate_text("hi")
 
 
 class ModelConfigTests(unittest.TestCase):
