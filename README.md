@@ -1,4 +1,112 @@
-# Gemma 4 + Gradio Hackathon Starter
+# Asset Intelligence Copilot
+
+An evidence-first chat copilot for oil-well operations, built for the FlytBase **Asset Intelligence Copilot** challenge (Hacktoberfest 2026 Hack Day). Operators ask plain-English questions about wells, inspections, repairs, regulator events, notes, manuals and SOPs. Every answer is calculated by code, shown with the right visual, and cites the records and manual passages behind it.
+
+It is built on the Gemma 4 starter that comes after this section (provider, retries, thinking level, image handling). The starter's 124 tests are unchanged and still pass; `gemma.py` only gained an optional tool-calling path (`generate_with_tools`), and its existing functions behave as before.
+
+## Run it
+
+```powershell
+# 1. Put the official dataset in data/sample-data (git-ignored, never committed).
+#    Clone it OUTSIDE this folder so the clone cannot be committed by accident:
+git clone https://github.com/FlytBaseAILabs/flytbase-ahc-swe-asset-intelligence-dataset ..\flytbase-ahc-swe-asset-intelligence-dataset
+xcopy /E /I ..\flytbase-ahc-swe-asset-intelligence-dataset\sample-data data\sample-data
+
+# 2. Add your key to .env (copy .env.example): GOOGLE_API_KEY=...
+
+# 3. Start the copilot
+.venv\Scripts\python.exe -m ahc          # http://127.0.0.1:8000
+```
+
+First start ingests the dataset into SQLite (about 2 s, then cached). Pick a user at the top right; each user has private chats, while corrections and notes are shared.
+
+**Loading a second dataset (the final test data):** list every root, separated by `;`. Later roots extend or override earlier ones by record ID, and nothing in the code names a well, area, user or answer.
+
+```powershell
+$env:AHC_DATA_DIRS = "data\sample-data;data\test-data"    # either the sample-data folder or its parent
+$env:AHC_AS_OF = "2026-10-16"                              # the reference "today"; also editable in the UI header
+.venv\Scripts\python.exe -m ahc
+```
+
+| Setting | Meaning |
+| --- | --- |
+| `AHC_DATA_DIRS` | Dataset roots (default `data/sample-data`). |
+| `AHC_AS_OF` | Reference date for "today", "right now" and relative periods (default `2026-10-16`, the official sample date). |
+| `AHC_DB`, `AHC_MEMORY_DB` | Dataset database (rebuildable) and persistent memory (corrections, rules, notes, chats). |
+| `AHC_TPM` | Input tokens per minute to stay under (default 13,500; the free Gemma tier allows 16,000). |
+| `GEMMA_*` | Model, thinking level and retries; see the starter section below. |
+
+Replay a list of questions (corrections are saved automatically) and write the answers:
+
+```powershell
+.venv\Scripts\python.exe -m ahc.batch questions\sample_scenarios.json --out results\sample-results.md
+```
+
+## How it works
+
+```
+Question ─► Gemma (picks a tool, fills its arguments)
+              │
+              ▼
+        22 deterministic tools ── ahc/analyst.py: the only code that does arithmetic
+              │      │
+              │      └─ effective-value layer: dataset record + active corrections (originals kept)
+              ▼
+        SQLite dataset DB (indexed) · rules read from the manuals/SOPs · persistent memory DB
+              │
+              ▼
+   facts + citations + flags + visuals ─► Gemma words the answer ─► grounding check ─► UI
+```
+
+- **Gemma never calculates.** It interprets the question, chooses a tool and writes the explanation. Production status, downtime, spill totals, costs, windows and compliance come from Python.
+- **Grounding check.** Gemma's wording is accepted only if every number and record ID in it also appears in the tool results (or the question). Otherwise the verified facts are shown instead, and the UI says so. A data question the model answers without calling a tool is never accepted: the built-in question patterns (`ahc/router.py`) run the same tools instead, and statements get one forced tool-call retry. The same patterns answer when Google's API is unreachable.
+- **Rules come from the documents.** The production threshold (T200 15 °C, T350 20 °C), spill classes, SR-01..SR-03 and RC-01..RC-04 deadlines, and the root-cause rule are read from the manuals and SOPs at load time with the quoted passage kept (see the Rules page). If a number cannot be found a visible fallback is used, never a silent one; a new well type with no rule gets "rule not found", not a guess.
+- **Downtime** is 7 days per weekly inspection that found the well not producing oil. Missed inspections add nothing and `downtime_hours` is never used. Status is derived from wellhead minus ambient temperature, not from `recorded_status`.
+- **Reports are followed through `report_file`**, never by guessing file names; containment times and compliance rows are parsed from each report.
+- **Visuals** are chosen from the answer's shape (list → table, change over time → line, comparison → bar, location → map, two dimensions → heatmap, one well → status card), and an explicitly requested visual always wins. Every answer can be switched between its available views.
+
+## How each challenge requirement is met
+
+| Requirement | Where |
+| --- | --- |
+| Chat over metadata, inspections, repairs, reports, regulator events, notes, manuals, SOPs | `ahc/ingest.py` loads all of it; 22 tools plus full-text search of manuals, SOPs and reports |
+| Right visual, explicit request respected | `ahc/visuals.py`; status card, table, line, bar, map, heatmap |
+| Cite exact records and documents | every tool returns citations; the evidence drawer opens the record or the manual section (`ahc/evidence.py`) |
+| Correct status, downtime, spills, costs, windows, compliance | `ahc/analyst.py`, `ahc/periods.py`, `ahc/rules.py`; golden tests against the official examples |
+| Shared knowledge and corrections persist across users | `ahc/store.py` (SQLite): corrections, scoped rules, shared notes and claims |
+| Private memory per user | conversations and "wells we discussed" are keyed by the session user; the model never supplies a user ID; other users get 403 |
+| Originals preserved; who, what, why, when, scope | corrections keep the dataset value, the value before, the new value, author, reason, timestamp and scope; a later correction supersedes but the history stays |
+| Corrections applied later; conflicts surfaced | one effective-value layer feeds every tool; disagreements (inspector note vs correction, two users, user vs inspection) are flagged and both statements kept |
+| Rules scoped to a well type | `propose_rule` saves a rule for `well_type` or one `well`; T350 rules never touch T200 |
+| Final dataset loads from its documented format | roots in `AHC_DATA_DIRS`; no hardcoded IDs or answer strings; synthetic-dataset tests use IDs not in the sample |
+
+Correction flow: say that a value is wrong, the copilot shows the **original value, the proposed replacement, the scope, who is changing it and why**, plus its effect (for example "not producing → producing") and any conflicting note. Nothing is saved until you press **Confirm and save**. The **Audit** page lists every correction, rule and shared note.
+
+Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation**, **Unconfirmed**, **No evidence**, **Out of date** (stale recorded status), **User rule**.
+
+## Tests
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover        # 256 tests
+```
+
+- `tests/test_ahc_golden.py`, `test_ahc_memory.py`: the official sample dataset against the example scenarios (expected values live **only** in tests; skipped if `data/sample-data` is absent).
+- `tests/test_ahc_core.py`: ingestion, rules, calculations and corrections on a **synthetic dataset** whose IDs, area names and edge cases (hot day, exact threshold, missed week, type-scoped rules) appear nowhere in the sample.
+- `tests/test_ahc_agent.py`: the agent loop, grounding check, visual choice, tool gating and the HTTP API with a scripted model.
+- `tests/test_ahc_router.py`: the built-in question patterns, the agent when the model is down, and the quota-aware retry.
+- `tests/test_ahc_ui.py`: the front-end files parse and are wired together.
+- The original 124 starter tests (provider, thinking, images, retries, task framework) still pass.
+
+## Limits worth knowing
+
+- The free Gemma tier allows 16,000 input tokens per minute for `gemma-4-26b-a4b-it`. The agent keeps prompts small (about 2K tokens for a question), tracks a rolling budget, and skips the optional wording step (showing the verified facts) rather than stalling. The API also returns occasional transient `500`s; the SDK retries them.
+- Containment times are parsed from the repair reports' compliance tables and prose with deterministic patterns (all 616 sample spill reports parse). A report worded very differently would show "no containment time on record" rather than a guess.
+- The map is drawn to scale from latitude and longitude without a basemap, so it works offline.
+- "Summer" is taken as 1 Jun to 31 Aug and the answer says so.
+
+---
+
+# Gemma 4 + Gradio Hackathon Starter (the base the copilot is built on)
 
 A small, reusable starting point for building with **Gemma 4** through the Gemini API. It is infrastructure only: clone it, add your key, and spend the hackathon on the idea instead of on setup.
 

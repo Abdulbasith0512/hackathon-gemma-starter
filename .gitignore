@@ -31,3 +31,6 @@ scratch/
 test_*.png
 test_*.jpg
 *.log
+
+# AHC copilot: official sample/test datasets and generated SQLite databases (never committed)
+data/

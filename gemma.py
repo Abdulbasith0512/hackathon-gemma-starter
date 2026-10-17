@@ -115,21 +115,22 @@ def _is_thinking_rejection(error: errors.APIError) -> bool:
     return error.code == 400 and "thinking" in (error.message or "").lower()
 
 
-def _send(client, model, contents, system_instruction, thinking):
+def _send(client, model, contents, system_instruction, thinking, tools=None, tool_config=None):
     config = types.GenerateContentConfig(
-        system_instruction=system_instruction, thinking_config=thinking
+        system_instruction=system_instruction, thinking_config=thinking, tools=tools, tool_config=tool_config
     )
     return client.models.generate_content(model=model, contents=contents, config=config)
 
 
-def _generate(contents: list, system_instruction: str | None) -> str:
+def _generate_response(contents: list, system_instruction: str | None, tools: list | None = None, tool_config=None):
+    """One model call with the thinking fallback and error mapping. Returns the raw SDK response."""
     client = get_client()
     model = get_model()
     level = get_thinking()
     thinking = _thinking_config(model, level)
     try:
         try:
-            response = _send(client, model, contents, system_instruction, thinking)
+            return _send(client, model, contents, system_instruction, thinking, tools, tool_config)
         except errors.APIError as e:
             if thinking is None or not _is_thinking_rejection(e):
                 raise
@@ -143,12 +144,15 @@ def _generate(contents: list, system_instruction: str | None) -> str:
                 level,
             )
             _THINKING_REJECTED.add((model, level))
-            response = _send(client, model, contents, system_instruction, None)
+            return _send(client, model, contents, system_instruction, None, tools, tool_config)
     except errors.APIError as e:
         raise GemmaError(f"Gemma API error (model '{model}'): {e.code} {e.message}") from e
     except Exception as e:  # network errors, SDK validation errors, etc.
         raise GemmaError(f"Request to Gemma failed: {type(e).__name__}: {e}") from e
 
+
+def _generate(contents: list, system_instruction: str | None) -> str:
+    response = _generate_response(contents, system_instruction)
     text = response.text
     if not text or not text.strip():
         reason = response.candidates[0].finish_reason if response.candidates else "no candidates"
@@ -188,3 +192,13 @@ def generate_multimodal(
 ) -> str:
     """Image (+ text) in -> text out. `image` is a PIL image."""
     return _generate([_to_image_part(image), prompt], system_instruction)
+
+
+def generate_with_tools(contents: list, tools: list, system_instruction: str | None = None, force_call: bool = False):
+    """Function calling: send `contents` (SDK Content objects) with `tools` and return the raw response.
+
+    The caller reads `response.candidates[0].content.parts` for function calls or text, and passes
+    the model's content back unchanged in the next turn. `force_call` requires a function call. Same thinking, timeout and retry policy.
+    """
+    tool_config = types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="ANY")) if force_call else None
+    return _generate_response(contents, system_instruction, tools, tool_config)
