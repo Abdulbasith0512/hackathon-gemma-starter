@@ -82,12 +82,14 @@ Question ─► Gemma (picks a tool, fills its arguments)
 
 Correction flow: say that a value is wrong, the copilot shows the **original value, the proposed replacement, the scope, who is changing it and why**, plus its effect (for example "not producing → producing") and any conflicting note. Nothing is saved until you press **Confirm and save**. The **Audit** page lists every correction, rule and shared note.
 
+**Data lineage:** in a heatmap, click any cell or any total (area, month or grand total) to open its lineage: the contributing inspection records with their source file and line, the corrections applied, the detections that were excluded and why, the date and scope filters, and the exact calculation (for example `37 + 26 + 35 + 43 = 141`). The panel checks that the number of listed records equals the number shown. The totals are computed on the server; the browser adds nothing up.
+
 Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation**, **Unconfirmed**, **No evidence**, **Out of date** (stale recorded status), **User rule**.
 
 ## Tests
 
 ```powershell
-.venv\Scripts\python.exe -m unittest discover        # 256 tests
+.venv\Scripts\python.exe -m unittest discover        # 271 tests
 ```
 
 - `tests/test_ahc_golden.py`, `test_ahc_memory.py`: the official sample dataset against the example scenarios (expected values live **only** in tests; skipped if `data/sample-data` is absent).
@@ -95,6 +97,7 @@ Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation
 - `tests/test_ahc_agent.py`: the agent loop, grounding check, visual choice, tool gating and the HTTP API with a scripted model.
 - `tests/test_ahc_router.py`: the built-in question patterns, the agent when the model is down, and the quota-aware retry.
 - `tests/test_ahc_ui.py`: the front-end files parse and are wired together.
+- `tests/test_ahc_lineage.py`: heatmap lineage reconciled against a raw-table recount and the source files, and proof that unsupported claims (digits, spelled-out numbers, invented IDs) cannot bypass verification.
 - The original 124 starter tests (provider, thinking, images, retries, task framework) still pass.
 
 ## Limits worth knowing

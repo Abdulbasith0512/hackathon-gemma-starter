@@ -141,18 +141,47 @@ def evidence_blob(results: list[dict], question: str = "") -> str:
     return re.sub(r"(?<=\d),(?=\d)", "", " ".join(parts))
 
 
+_WORD_VALUES = {w: i for i, w in enumerate("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+_WORD_VALUES.update({w: 10 * (i + 2) for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split())})
+_NUMWORDS = re.compile(
+    r"\b((?:(?:" + "|".join(_WORD_VALUES) + r"|hundred|thousand|and)[\s-]+)*(?:" + "|".join(_WORD_VALUES) + r"|hundred|thousand))\b"
+    r"(\s+(?:spills?|wells?|days?|repairs?|inspections?|breach(?:es)?|hours?|barrels?|bbl|weeks?|months?|events?|fines?|areas?|records?))?", re.I)
+
+
+def _spelled_numbers(text: str) -> list[tuple[str, int, bool]]:
+    """Numbers written as words: (phrase, value, followed_by_a_counted_noun)."""
+    out = []
+    for m in _NUMWORDS.finditer(text):
+        total = current = 0
+        for w in re.split(r"[\s-]+", m.group(1).lower()):
+            if w in _WORD_VALUES:
+                current += _WORD_VALUES[w]
+            elif w == "hundred":
+                current = (current or 1) * 100
+            elif w == "thousand":
+                total, current = total + (current or 1) * 1000, 0
+        out.append((re.sub(r"^(?:and[\s-]+)+", "", m.group(1), flags=re.I), total + current, bool(m.group(2))))
+    return out
+
+
 def ground_check(answer: str, results: list[dict], question: str = "") -> list[str]:
     """Numbers and record IDs in `answer` that no tool result (or the question) contains. Empty means grounded.
 
     IDs must appear exactly; numbers must appear as whole numbers (digits inside record IDs do not count).
+    Numbers spelled out in words are checked too when they are 20 or more, use 'hundred'/'thousand',
+    or count something ("three wells"), so spelling a number out is not a way around the check.
     """
     blob = evidence_blob(results, question)
     allowed = set(_ANYNUM.findall(re.sub(r"(?<=\d),(?=\d)", "", _ID.sub(" ", blob))))
+    allowed |= {str(v) for _p, v, _c in _spelled_numbers(blob)}
     text = re.sub(r"(?m)^\s*(?:\d+[.)]|[-*•])\s+", "", answer)
     bad = [cid for cid in set(_ID.findall(text)) if cid not in blob]
     for num in set(_NUM.findall(re.sub(r"(?<=\d),(?=\d)", "", _ID.sub(" ", text)))):
         if num not in allowed:
             bad.append(num)
+    for phrase, value, counted in _spelled_numbers(text):
+        if (value >= 20 or counted or re.search(r"hundred|thousand", phrase, re.I)) and str(value) not in allowed:
+            bad.append(phrase.strip())
     return sorted(bad)
 
 

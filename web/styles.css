@@ -206,3 +206,14 @@ details.raw pre { background: var(--bg); border: 1px solid var(--line); border-r
 
 .page-inner .tablewrap { max-height: none; }
 .sec-text { padding: 0 12px 8px; font-size: 13.5px; } .sec-text p { margin: 0 0 6px; } .sec-text .tablewrap { max-height: none; margin: 4px 0 8px; }
+
+.heat button.tot { background: none; border: 1px solid transparent; border-radius: 6px; text-align: center; align-self: center; font-weight: 700; color: var(--accent); font-family: var(--mono); padding: 8px 0; }
+.heat button.tot:hover { border-color: var(--accent); }
+.heat button.tot.grand { background: rgba(245,165,36,.14); border-color: rgba(245,165,36,.5); }
+.heat button.cell:hover { outline: 2px solid var(--text); outline-offset: -2px; }
+.lineage { margin-top: 12px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 12px 14px; }
+.lin-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; font-size: 14px; }
+.lin-head .icon-btn { margin-left: auto; }
+.lin-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; font-size: 13.5px; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+@media (max-width: 900px) { .lin-grid { grid-template-columns: 1fr; } }

@@ -712,16 +712,66 @@ class Analyst:
         cols = [MONTH_ABBR[mo - 1] + (f" {yy}" if multi_year else "") for yy, mo in months]
         values = [[len(grid[a][mo]) for mo in months] for a in area_ids]
         rows = [[self.areas[a]["name"]] + v + [sum(v)] for a, v in zip(area_ids, values)]
-        facts = [{"text": f"Spills by area and month, {per.label}: " + "; ".join(f"{r[0]} {r[-1]}" for r in rows) + ". Corrected detections are not counted.", "cites": []}]
+        row_totals = [sum(v) for v in values]
+        col_totals = [sum(values[r][c] for r in range(len(area_ids))) for c in range(len(months))]
+        grand_total = sum(row_totals)
+        facts = [{"text": f"Spills by area and month, {per.label}: " + "; ".join(f"{r[0]} {r[-1]}" for r in rows) + ". Corrected detections are not counted.", "cites": []},
+                 {"text": f"Total across all areas: {grand_total} spills (the sum of the area totals: " + " + ".join(str(t) for t in row_totals) + ").", "cites": []}]
+        # Detections that were removed, grouped by the cell they would have been in, with the reason.
+        excluded_cells = [[[] for _ in months] for _ in area_ids]
+        for i in excluded:
+            self.c_ins(cites, i)
+            d = date.fromisoformat(i["inspected_date"])
+            ov = i["spill_override"]
+            refs, why = [], []
+            if ov:
+                cites.add(ov["note_id"], "note", f"{ov['note_id']} · correction · {self.user_name(ov['author_user_id'])}")
+                refs.append(ov["note_id"])
+                why.append(f"correction note {ov['note_id']} by {self.user_name(ov['author_user_id'])}: \"{ov['text']}\"")
+            for c in (c for c in i["corrections"] if c["field"] == "spill_detected"):
+                refs.append(self.c_cor(cites, c))
+                why.append(f"correction {c['correction_id']} by {self.user_name(c['author_user_id'])}: {c['reason']}")
+            excluded_cells[area_ids.index(self.wells[i["asset_id"]]["area_id"])][months.index((d.year, d.month))].append(
+                {"inspection_id": i["inspection_id"], "asset_id": i["asset_id"], "reason": "; ".join(why) or "marked as not a spill", "refs": refs})
         if excluded:
             facts.append({"text": f"{len(excluded)} detection(s) were removed because a correction says they were not crude spills.", "cites": [i["inspection_id"] for i in excluded][:30]})
-            for i in excluded:
-                self.c_ins(cites, i)
+        lineage = {
+            "calculation": "Each cell counts inspections whose effective spill flag is true, grouped by the well's area and by the month of the inspection date. "
+                           "An area total is the sum of its monthly cells, a month total is the sum over areas, and the grand total is the sum of the area totals.",
+            "filters": [["Period", f"{per.label} (inspection date, both ends included)"], ["Scope", label], ["As-of date", self.as_of_s],
+                        ["Counted as a spill", "the dataset's spill detection, unless a correction says it was not a crude spill"],
+                        ["Values used", "dataset records with active corrections applied; originals are kept"], ["Grouping", "area = the well's area ID; month = calendar month of the inspection date (UTC)"]],
+            "row_totals": row_totals, "col_totals": col_totals, "grand_total": grand_total, "excluded_total": len(excluded), "excluded_cells": excluded_cells,
+            "source_table": "inspections (loaded from assets/<well>/inspections.jsonl; each record lists its file and line)",
+        }
         heat = {"kind": "heatmap", "title": f"Spills by area and month · {per.label}", "rows": [self.areas[a]["name"] for a in area_ids], "cols": cols, "values": values,
-                "cells": [[grid[a][mo] for mo in months] for a in area_ids]}
-        return self.result("spill_heatmap", "Spills by area and month", cites, window=per.as_dict(), data={"matrix": {r[0]: r[1:-1] for r in rows}, "totals": {r[0]: r[-1] for r in rows}},
+                "cells": [[grid[a][mo] for mo in months] for a in area_ids], "lineage": lineage}
+        return self.result("spill_heatmap", "Spills by area and month", cites, window=per.as_dict(),
+                           data={"matrix": {r[0]: r[1:-1] for r in rows}, "totals": {r[0]: r[-1] for r in rows}, "grand_total": grand_total, "excluded_total": len(excluded)},
                            facts=facts, visuals={"heatmap": heat, "table": {"kind": "table", "columns": ["Area"] + cols + ["Total"], "rows": rows}}, natural="heatmap",
                            entities={"areas": area_ids, "wells": []})
+
+    def lineage_rows(self, inspection_ids: list[str]) -> list[dict]:
+        """The source records behind a number: effective and original values, source file and line, and corrections."""
+        ids = [i for i in dict.fromkeys(inspection_ids) if i][:500]
+        if not ids:
+            return []
+        out = []
+        for r in self.c.execute(f"SELECT * FROM inspections WHERE inspection_id IN ({','.join('?' * len(ids))}) ORDER BY inspected_at, inspection_id", ids):
+            i = self._eff(r)
+            note = None
+            if i["spill_override"]:
+                n = self.c.execute("SELECT note_id, text, source FROM notes WHERE note_id=?", (i["spill_override"]["note_id"],)).fetchone()
+                note = {"note_id": i["spill_override"]["note_id"], "text": i["spill_override"]["text"], "author": self.user_name(i["spill_override"]["author_user_id"]), "source": f"assets/{n['source']}" if n else None}
+            out.append({
+                "inspection_id": i["inspection_id"], "asset_id": i["asset_id"], "area": self.areas.get(self.wells[i["asset_id"]]["area_id"], {}).get("name"),
+                "inspected_at": i["inspected_at"], "counted_as_spill": bool(i["spill"]), "dataset_flag": bool(i["orig"]["spill_detected"]),
+                "volume_bbl": i["spill_est_volume_bbl"], "original_volume_bbl": i["orig"]["spill_est_volume_bbl"], "pad_area_pct": i["spill_area_pct"],
+                "source": f"assets/{r['source']}", "dataset_correction_note": note,
+                "corrections": [{"id": c["correction_id"], "field": c["field"], "original": c["original_value"], "new": c["new_value"], "by": self.user_name(c["author_user_id"]),
+                                 "why": c["reason"], "when": c["created_at"]} for c in i["corrections"]],
+            })
+        return out
 
     def rca_rule(self, w: dict, equipment_kind: str) -> dict | None:
         sr = self.store.scoped_rule("rca_corrective_count", w["well_type"], w["asset_id"], equipment_kind) if self.store else None

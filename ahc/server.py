@@ -149,6 +149,17 @@ def create_app(roots=None, db_path=None, memory_path=None, as_of: date | None = 
             raise HTTPException(404, f"No record or document found for '{ref}'.")
         return res
 
+    @app.get("/api/lineage/inspections")
+    def lineage_inspections(ids: str = Query(..., description="comma-separated inspection IDs")):
+        wanted = [i.strip() for i in ids.split(",") if i.strip()]
+        if not wanted:
+            raise HTTPException(400, "Give at least one inspection ID.")
+        if len(wanted) > 500:
+            raise HTTPException(400, "At most 500 inspection IDs at a time.")
+        with rt.session() as A:
+            rows = A.lineage_rows(wanted)
+        return {"rows": rows, "missing": sorted(set(wanted) - {r["inspection_id"] for r in rows})}
+
     @app.get("/api/audit")
     def audit():
         with rt.session() as A:

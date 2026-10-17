@@ -105,16 +105,19 @@ function mapHTML(s) {
   g += `<text x="${W - 14}" y="22" text-anchor="end" style="font-size:13px;fill:#93a1b3">N ↑</text><text x="12" y="${H - 10}" style="font-size:11px">lat ${la0.toFixed(3)}–${la1.toFixed(3)} · lon ${lo0.toFixed(3)}–${lo1.toFixed(3)} (no basemap; positions to scale)</text>`;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of wells" style="background:#0c121a;border-radius:10px">${g}</svg>`;
 }
-function heatHTML(s, host) {
-  const max = Math.max(...s.values.flat(), 1);
-  const cols = s.cols.length + 2;
+function heatHTML(s) {
+  const L = s.lineage, max = Math.max(...s.values.flat(), 1);
+  const rowTotals = L ? L.row_totals : s.values.map((r) => r.reduce((a, b) => a + b, 0));   // totals come from the server when available
   let h = `<div class="heat" style="grid-template-columns:minmax(120px,1.6fr) repeat(${s.cols.length}, minmax(34px,1fr)) 54px"><div></div>${s.cols.map((c) => `<div class="h">${esc(c)}</div>`).join("")}<div class="h">Total</div>`;
   s.rows.forEach((r, i) => {
     h += `<div class="rl">${esc(r)}</div>`;
-    s.values[i].forEach((v, j) => { const a = v ? 0.16 + 0.84 * (v / max) : 0.04; h += `<button class="cell" data-cell="${i},${j}" style="background:rgba(245,165,36,${a.toFixed(2)});${v ? "" : "color:#64748b;"}" aria-label="${esc(r)} ${esc(s.cols[j])}: ${v}">${v}</button>`; });
-    h += `<div class="tot">${s.values[i].reduce((a, b) => a + b, 0)}</div>`;
+    s.values[i].forEach((v, j) => { const a = v ? 0.16 + 0.84 * (v / max) : 0.04; h += `<button class="cell" data-cell="${i},${j}" style="background:rgba(245,165,36,${a.toFixed(2)});${v ? "" : "color:#64748b;"}" aria-label="${esc(r)} ${esc(s.cols[j])}: ${v}. Show the records behind this number.">${v}</button>`; });
+    h += `<button class="tot" data-total="row,${i}" aria-label="${esc(r)} total: ${rowTotals[i]}. Show the calculation.">${rowTotals[i]}</button>`;
   });
-  return h + `</div><div class="pop" hidden></div><div class="sub" style="margin-top:6px">Click a cell to list the inspections behind it.</div>`;
+  if (L) {
+    h += `<div class="rl" style="font-weight:700">Total</div>` + L.col_totals.map((v, j) => `<button class="tot" data-total="col,${j}" aria-label="${esc(s.cols[j])} total: ${v}. Show the calculation.">${v}</button>`).join("") + `<button class="tot grand" data-total="all" aria-label="Grand total: ${L.grand_total}. Show the calculation.">${L.grand_total}</button>`;
+  }
+  return h + `</div><div class="lineage" hidden></div><div class="sub" style="margin-top:6px">Click a number or a total to see the source records, files, corrections and the calculation behind it.</div>`;
 }
 function renderVisual(kind, spec) {
   return { table: tableHTML, bar: barHTML, line: lineHTML, map: mapHTML, heatmap: heatHTML, status_card: cardHTML }[kind]?.(spec) || `<div class="empty">Cannot draw this visual.</div>`;
@@ -130,11 +133,38 @@ function renderBlock(b) {
   $$(".seg button", el).forEach((btn) => btn.addEventListener("click", () => show(btn.dataset.k)));
   return el;
 }
+/* Lineage: the records, files, corrections, exclusions and calculation behind a heatmap number. */
+function heatSelection(s, kind, i, j) {
+  const L = s.lineage || {}, cells = s.cells, ex = L.excluded_cells || [];
+  const nr = cells.length, nc = s.cols.length, flat = (m) => m.flat(2);
+  if (kind === "cell") return { title: `${s.rows[i]} · ${s.cols[j]}`, ids: cells[i][j], excluded: ex[i]?.[j] || [], value: s.values[i][j], formula: `${cells[i][j].length} record(s) counted` };
+  if (kind === "row") return { title: `${s.rows[i]} · total`, ids: flat(cells[i]), excluded: flat(ex[i] || []), value: L.row_totals[i], formula: `${s.values[i].join(" + ")} = ${L.row_totals[i]}` };
+  if (kind === "col") return { title: `${s.cols[j]} · total for all areas`, ids: flat(cells.map((r) => r[j])), excluded: flat(ex.map((r) => r[j])), value: L.col_totals[j], formula: `${s.values.map((r) => r[j]).join(" + ")} = ${L.col_totals[j]}` };
+  return { title: "Grand total", ids: flat(cells), excluded: flat(ex), value: L.grand_total, formula: `${L.row_totals.join(" + ")} = ${L.grand_total}  (sum of the area totals)` };
+}
+async function showLineage(body, s, sel) {
+  const box = $(".lineage", body), L = s.lineage || {};
+  box.hidden = false; box.innerHTML = `<div class="sub">Loading source records…</div>`;
+  let rows = [], missing = [];
+  try { if (sel.ids.length) { const r = await api(`/api/lineage/inspections?ids=${encodeURIComponent(sel.ids.join(","))}`); rows = r.rows; missing = r.missing; } }
+  catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const ok = rows.length === sel.value && missing.length === 0 && rows.every((r) => r.counted_as_spill);
+  const src = (p) => { const k = p.lastIndexOf(":"); return `<span class="mono">${esc(p.slice(0, k))}</span> <span class="sub">line ${esc(p.slice(k + 1))}</span>`; };
+  const cor = (r) => [...r.corrections.map((c) => `<div>${chip(c.id)} ${esc(c.field)}: ${esc(c.original)} → <strong>${esc(c.new)}</strong> (${esc(c.by)})</div>`), r.dataset_correction_note ? `<div>${chip(r.dataset_correction_note.note_id)}</div>` : ""].join("") || `<span class="sub">none</span>`;
+  const table = rows.length ? `<div class="tablewrap"><table class="data"><thead><tr><th>Record</th><th>Well</th><th>Date</th><th>Volume (bbl)</th><th>Source file</th><th>Corrections</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${chip(r.inspection_id)}</td><td>${chip(r.asset_id)}</td><td>${esc(r.inspected_at.slice(0, 10))}</td><td>${esc(r.volume_bbl ?? "—")}${r.original_volume_bbl !== r.volume_bbl ? ` <span class="sub">(dataset ${esc(r.original_volume_bbl)})</span>` : ""}</td><td>${src(r.source)}</td><td>${cor(r)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No records contribute to this number.</div>`;
+  const excl = sel.excluded.length ? `<div class="k" style="margin-top:10px">Excluded from this number (${sel.excluded.length}) — detected, but not counted</div>${sel.excluded.map((e) => `<div class="signal corrected"><span class="tag">excluded</span><span>${chip(e.inspection_id)} ${chip(e.asset_id)} ${esc(e.reason)} ${(e.refs || []).map(chip).join(" ")}</span></div>`).join("")}` : "";
+  box.innerHTML = `<div class="lin-head"><strong>${esc(sel.title)}</strong> <span class="pill ${ok ? "producing" : "not-producing"}" style="font-size:11px">${ok ? `✓ ${rows.length} records = ${sel.value}` : `✗ ${rows.length} records ≠ ${sel.value}`}</span><button class="icon-btn" aria-label="Close" data-close>✕</button></div>
+    <div class="lin-grid"><div><div class="k">Calculation</div><div>${esc(sel.formula)}</div><div class="sub" style="margin-top:4px">${esc(L.calculation || "")}</div></div>
+    <div><div class="k">Filters</div>${(L.filters || []).map(([k, v]) => `<div class="sub"><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join("")}</div></div>
+    <div class="k" style="margin-top:10px">Contributing records (${rows.length})</div>${table}${excl}
+    <div class="sub" style="margin-top:8px">${esc(L.source_table || "")}</div>`;
+  $("[data-close]", box).addEventListener("click", () => { box.hidden = true; });
+}
 function wireHeat(body, s) {
-  $$("button.cell", body).forEach((btn) => btn.addEventListener("click", () => {
-    const [i, j] = btn.dataset.cell.split(",").map(Number), ids = s.cells[i][j], pop = $(".pop", body);
-    pop.hidden = false; pop.innerHTML = ids.length ? `<strong>${esc(s.rows[i])} · ${esc(s.cols[j])}</strong> — ${ids.length} spill(s): ${ids.map(chip).join(" ")}` : `No spills in ${esc(s.rows[i])} for ${esc(s.cols[j])}.`;
-  }));
+  $$("button.cell", body).forEach((btn) => btn.addEventListener("click", () => { const [i, j] = btn.dataset.cell.split(",").map(Number); showLineage(body, s, heatSelection(s, "cell", i, j)); }));
+  $$("button.tot", body).forEach((btn) => btn.addEventListener("click", () => { const [kind, n] = btn.dataset.total.split(","); showLineage(body, s, heatSelection(s, kind, +n, +n)); }));
+  const want = new URLSearchParams(location.search).get("cell");   // demo links: ?cell=0,3 or ?cell=all
+  if (want) (want === "all" ? $("button.grand", body) : $(`button.cell[data-cell="${want}"]`, body))?.click();
 }
 
 /* ---------- message rendering ---------- */
