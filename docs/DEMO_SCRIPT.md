@@ -5,7 +5,7 @@
 **0:30-2:15 How it is built** (screen: the README diagram, then the Rules page)
 - Data goes into SQLite with provenance; manuals, SOPs and repair reports are split into citable sections.
 - Rules (production threshold per well type, spill classes, deadlines) are read from the documents, with the quoted passage.
-- 23 deterministic tools do all the maths. Gemma 4 only chooses the tool and words the answer; a grounding check rejects any number it cannot find in the tool results.
+- 24 deterministic tools do all the maths. Gemma 4 only chooses the tool and words the answer; a grounding check rejects any number it cannot find in the tool results.
 - Two memories: shared (corrections, rules, notes; originals kept, who/why/when/scope) and private per user.
 
 **2:15-4:45 One real use case, end to end** (screen: the UI; pick Michael Turner)

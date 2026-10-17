@@ -54,6 +54,9 @@ def render(item: dict, out: dict, seconds: float) -> str:
         lines += ["**Signals:** " + "; ".join(f"{f['type']}: {f['text']}" for f in out["flags"][:8]), ""]
     if out.get("citations"):
         lines += ["**Evidence:** " + ", ".join(c["id"] for c in out["citations"][:30]) + (" …" if len(out["citations"]) > 30 else ""), ""]
+    v = out.get("verification") or {}
+    if v:
+        lines.append(f"**Verification: {v['status']}**" + (" — " + " ".join(v["reasons"][:3]) if v.get("reasons") else " — numbers and records recomputed from the dataset") + (f" ({v['evaluation_id']})" if v.get("evaluation_id") else ""))
     lines.append(f"_tools: {', '.join(c['name'] for c in out.get('tool_calls', []))} · answer: {out['answer_source']} · {seconds:.1f}s_")
     if out.get("warnings"):
         lines.append("_" + " ".join(out["warnings"]) + "_")
@@ -91,7 +94,7 @@ def main(argv=None) -> None:
             seconds = time.time() - t0
         print(f"[{item.get('id', '?')}] {item['user']}: {item['text'][:70]}  ({seconds:.1f}s)" + (f"  ERROR {out['error'][:80]}" if out.get("error") else ""), flush=True)
         md.append(render(item, out, seconds))
-        results.append({"id": item.get("id"), "user": item["user"], "text": item["text"], "seconds": round(seconds, 1), **{k: out.get(k) for k in ("answer", "answer_source", "tool_calls", "flags", "warnings", "error")},
+        results.append({"id": item.get("id"), "user": item["user"], "text": item["text"], "seconds": round(seconds, 1), **{k: out.get(k) for k in ("answer", "answer_source", "tool_calls", "flags", "warnings", "error", "verification")},
                         "citations": [c["id"] for c in out.get("citations", [])], "visuals": [b["visual"]["kind"] for b in out.get("blocks", [])]})
         out_path.write_text("\n".join(md), encoding="utf-8")
         out_path.with_suffix(".json").write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")

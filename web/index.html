@@ -16,6 +16,7 @@
     <button class="rail-btn active" data-view="chat" aria-label="Copilot"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Copilot</span></button>
     <button class="rail-btn" data-view="audit" aria-label="Audit trail"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Audit</span></button>
     <button class="rail-btn" data-view="rules" aria-label="Rules and sources"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM8 8h8M8 12h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Rules</span></button>
+    <button class="rail-btn" data-view="eval" aria-label="Answer verification"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6zM8.5 12l2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><span>Verify</span></button>
     <div class="rail-foot"><span class="dot" id="live-dot" title="Server status"></span></div>
   </nav>
 
@@ -49,6 +50,9 @@
 
     <section id="view-audit" class="view page" hidden>
       <div class="page-inner" id="audit-body"></div>
+    </section>
+    <section id="view-eval" class="view page" hidden>
+      <div class="page-inner" id="eval-body"></div>
     </section>
     <section id="view-rules" class="view page" hidden>
       <div class="page-inner" id="rules-body"></div>

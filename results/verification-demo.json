@@ -1,0 +1,415 @@
+[
+  {
+    "id": "Q1",
+    "user": "Michael Turner",
+    "text": "All our wells feed one reservoir. Map the reservoir pressure across the field from the pressure data.",
+    "seconds": 17.7,
+    "answer": "I am unable to map the reservoir pressure across the field as no tool is available to retrieve reservoir pressure data.\n\n*   The available tools provide information on well production status, downtime, repairs, spills, and inspections, but do not include reservoir pressure readings.\n*   A search of the documentation did not return any data sources or procedures for reservoir pressure mapping.",
+    "answer_source": "model",
+    "tool_calls": [
+      {
+        "name": "search_documents",
+        "args": {
+          "query": "reservoir pressure data"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [],
+    "warnings": [],
+    "error": null,
+    "verification": {
+      "status": "NEEDS_REVIEW",
+      "reasons": [
+        "No independent recomputation exists for search_documents, so its result is not verified here.",
+        "No independent rule classifies this question, so it cannot be confirmed that the tools used answer what was asked."
+      ],
+      "evaluation_id": "EV-B882D0CFA2"
+    },
+    "citations": [
+      "T200#11",
+      "T200#3",
+      "SR-01",
+      "T200#2",
+      "operations-sop-rev2#ops-3-status-evidence-precedence"
+    ],
+    "visuals": [
+      "table"
+    ]
+  },
+  {
+    "id": "Q2",
+    "user": "Robert Hayes",
+    "text": "Which well produced the most oil in 2026?",
+    "seconds": 63.8,
+    "answer": "I do not have a tool that provides the total oil production volume per well; the available tools only track downtime, repairs, spills, and regulatory events.",
+    "answer_source": "model",
+    "tool_calls": [
+      {
+        "name": "downtime_ranking",
+        "args": {
+          "end": "2026-12-31",
+          "period": "2026",
+          "top_n": 10,
+          "scope": "all",
+          "well_type": "all"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [],
+    "warnings": [],
+    "error": null,
+    "verification": {
+      "status": "NEEDS_REVIEW",
+      "reasons": [
+        "No independent rule classifies this question, so it cannot be confirmed that the tools used answer what was asked."
+      ],
+      "evaluation_id": "EV-04B987441F"
+    },
+    "citations": [],
+    "visuals": [
+      "bar"
+    ]
+  },
+  {
+    "id": "Q3",
+    "user": "Laura Simmons",
+    "text": "Since 1 Nov 2026, every time an operator note reports gas at a well, did we get someone out to that well in time under our operating procedures? List every report and whether the response met the deadline.",
+    "seconds": 77.8,
+    "answer": "Since 1 November 2026, 17 gas-odor reports met the response deadline and 9 missed it.\n\n*   **Summary:** Out of 26 total reports, 17 met the response deadline and 9 missed it [operations-sop-rev2#ops-1-gas-odor-response].\n*   **Deadline Rules:** For reports before 1 January 2027, the deadline was 24 hours; for reports after that date, the deadline was 12 hours [operations-sop-rev2#ops-1-gas-odor-response].\n*   **Missed Deadlines (Examples):**\n    *   **WELL-0163:** Report [CTX-0163-002] on 2026-11-03; first response [MNT-0163-019] was after 251.1 hours (Limit: 24 h) [CTX-0163-002].\n    *   **WELL-0341:** Report [CTX-0341-002] on 2026-11-19; first response [INS-0341-0109] was after 677.8 hours (Limit: 24 h) [CTX-0341-002].\n    *   **WELL-0332:** Report [CTX-0332-004] on 2026-12-03; no response is recorded (Limit: 24 h).\n    *   **WELL-0401:** Report [CTX-0401-002] on 2026-12-05; first response [MNT-0401-033] was after 138.2 hours (Limit: 24 h) [CTX-0401-002].\n    *   **WELL-0052:** Report [CTX-0052-003] on 2026-12-18; no response is recorded (Limit: 24 h).\n    *   **WELL-0362:** Report [CTX-0362-002] on 2026-12-24; first response [MNT-0362-030] was after 31.8 hours (Limit: 24 h) [CTX-0362-002].\n    *   **WELL-0161:** Report [CTX-0161-006] on 2026-12-25; first response [INS-0161-0168] was after 475.2 hours (Limit: 24 h) [CTX-0161-006].\n    *   **WELL-0599:** Report [CTX-0599-003] on 2027-01-06; first response [INS-0599-0196] was after 16.4 hours (Limit: 12 h) [CTX-0599-003].\n    *   **WELL-0516:** Report [CTX-0516-002] on 2027-01-06; first response [INS-0516-0215] was after 15.0 hours (Limit: 12 h) [CTX-0516-002].",
+    "answer_source": "model",
+    "tool_calls": [
+      {
+        "name": "gas_response",
+        "args": {
+          "start": "2026-11-01",
+          "scope": "all"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [],
+    "warnings": [],
+    "error": null,
+    "verification": {
+      "status": "PASS",
+      "reasons": [],
+      "evaluation_id": "EV-F015C6D4C2"
+    },
+    "citations": [
+      "operations-sop-rev2#ops-1-gas-odor-response",
+      "CTX-0163-002",
+      "MNT-0163-019",
+      "CTX-0149-004",
+      "MNT-0149-029",
+      "CTX-0165-001",
+      "MNT-0165-031",
+      "CTX-0341-002",
+      "INS-0341-0109",
+      "CTX-0091-001",
+      "MNT-0091-019",
+      "CTX-0423-002",
+      "INS-0423-0213",
+      "CTX-0059-002",
+      "INS-0059-0213",
+      "CTX-0332-004",
+      "CTX-0401-002",
+      "MNT-0401-033",
+      "CTX-0189-003",
+      "MNT-0189-037",
+      "CTX-0403-004",
+      "MNT-0403-024",
+      "CTX-0244-002",
+      "MNT-0244-026",
+      "CTX-0040-002",
+      "MNT-0040-029",
+      "CTX-0228-004",
+      "INS-0228-0144",
+      "CTX-0052-003",
+      "CTX-0370-005",
+      "MNT-0370-028",
+      "CTX-0362-002",
+      "MNT-0362-030",
+      "CTX-0161-006",
+      "INS-0161-0168",
+      "CTX-0135-009",
+      "MNT-0135-034",
+      "CTX-0324-001",
+      "MNT-0324-036",
+      "CTX-0330-003",
+      "MNT-0330-030",
+      "CTX-0599-003",
+      "INS-0599-0196",
+      "CTX-0516-002",
+      "INS-0516-0215",
+      "CTX-0425-006",
+      "INS-0425-0218",
+      "CTX-0465-005",
+      "MNT-0465-031",
+      "CTX-0137-004",
+      "MNT-0137-032"
+    ],
+    "visuals": [
+      "table"
+    ]
+  },
+  {
+    "id": "Q5",
+    "user": "Michael Turner",
+    "text": "The State Oil & Gas Commission wrote to us in November 2026 about spills. Which of our spills does the letter cover, and on which ones are we not compliant? Show me a table.",
+    "seconds": 72.1,
+    "answer": "0 regulator event(s) in the whole field, 1 Nov 2026 to 30 Nov 2026; fines USD 0, of which USD 0 still open.\n48 oil spill(s) in the whole field, 1 Nov 2026 to 30 Nov 2026, totalling 70.5 bbl. [INS-0035-0210, INS-0062-0207, INS-0077-0204]\n19 Nov 2026: WELL-0035, 1.0 bbl (INS-0035-0210).\n5 Nov 2026: WELL-0062, 0.3 bbl (INS-0062-0207).\n5 Nov 2026: WELL-0077, 0.7 bbl (INS-0077-0204).\n19 Nov 2026: WELL-0113, 0.5 bbl (INS-0113-0213).\n12 Nov 2026: WELL-0114, 0.5 bbl (INS-0114-0210).\n12 Nov 2026: WELL-0117, 2.3 bbl (INS-0117-0196).\n5 Nov 2026: WELL-0119, 6.0 bbl (INS-0119-0209).\n12 Nov 2026: WELL-0134, 0.5 bbl (INS-0134-0208).\n5 Nov 2026: WELL-0138, 1.2 bbl (INS-0138-0211).\n12 Nov 2026: WELL-0143, 0.2 bbl (INS-0143-0179).\n19 Nov 2026: WELL-0151, 0.7 bbl (INS-0151-0209).\n19 Nov 2026: WELL-0169, 0.4 bbl (INS-0169-0211).\n12 Nov 2026: WELL-0181, 1.5 bbl (INS-0181-0212).\n12 Nov 2026: WELL-0189, 1.3 bbl (INS-0189-0212).\n19 Nov 2026: WELL-0194, 0.4 bbl (INS-0194-0209).\n12 Nov 2026: WELL-0200, 0.6 bbl (INS-0200-0210).\n19 Nov 2026: WELL-0203, 4.3 bbl (INS-0203-0213).\n12 Nov 2026: WELL-0225, 1.6 bbl (INS-0225-0208).\n26 Nov 2026: WELL-0235, 0.5 bbl (INS-0235-0212).\n26 Nov 2026: WELL-0240, 1.6 bbl (INS-0240-0211).\n12 Nov 2026: WELL-0246, 0.1 bbl (INS-0246-0126).\n12 Nov 2026: WELL-0253, 2.1 bbl (INS-0253-0209).\n12 Nov 2026: WELL-0281, 0.6 bbl (INS-0281-0207).\n5 Nov 2026: WELL-0287, 2.4 bbl (INS-0287-0208).\n26 Nov 2026: WELL-0299, 0.6 bbl (INS-0299-0210).\n5 Nov 2026: WELL-0331, 0.9 bbl (INS-0331-0206).\n19 Nov 2026: WELL-0332, 2.5 bbl (INS-0332-0211).\n5 Nov 2026: WELL-0381, 4.5 bbl (INS-0381-0205).\n19 Nov 2026: WELL-0383, 4.4 bbl (INS-0383-0211).\n19 Nov 2026: WELL-0390, 0.6 bbl (INS-0390-0209).\n19 Nov 2026: WELL-0404, 3.2 bbl (INS-0404-0206).\n5 Nov 2026: WELL-0405, 0.7 bbl (INS-0405-0209).\n19 Nov 2026: WELL-0411, 0.4 bbl (INS-0411-0139).\n19 Nov 2026: WELL-0420, 0.9 bbl (INS-0420-0211).\n5 Nov 2026: WELL-0422, 2.2 bbl (INS-0422-0205).\n12 Nov 2026: WELL-0429, 0.5 bbl (INS-0429-0210).\n19 Nov 2026: WELL-0450, 0.4 bbl (INS-0450-0208).\n26 Nov 2026: WELL-0459, 0.2 bbl (INS-0459-0212).\n19 Nov 2026: WELL-0467, 0.9 bbl (INS-0467-0209).\n12 Nov 2026: WELL-0487, 0.3 bbl (INS-0487-0209).\n26 Nov 2026: WELL-0492, 1.0 bbl (INS-0492-0130).\n26 Nov 2026: WELL-0494, 6.2 bbl (INS-0494-0209).\n19 Nov 2026: WELL-0501, 0.8 bbl (INS-0501-0205).\n5 Nov 2026: WELL-0505, 0.5 bbl (INS-0505-0210).\n26 Nov 2026: WELL-0564, 5.7 bbl (INS-0564-0181).\n5 Nov 2026: WELL-0572, 0.3 bbl (INS-0572-0207).\n5 Nov 2026: WELL-0574, 1.0 bbl (INS-0574-0209).\n26 Nov 2026: WELL-0589, 0.5 bbl (INS-0589-0212).\nBy area: Northwest Block 12 12; Southeast Block 32 11; Northeast Block 7 9; Northeast Block 8 6; Southeast Block 31 5; Southwest Block 23 3; Southwest Block 24 2.\n23 breach(es) in the whole field for 1 Nov 2026 to 30 Nov 2026; USD 12,500 in fines still open. 3 of 48 spill(s) reached the 5 bbl reporting threshold.\nWELL-0035 spill of 1.0 bbl on 19 Nov 2026 (INS-0035-0210), class moderate.\nSR-02 breach: contained after about 8.7 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0035-030, MNT-0035-030]\nWELL-0062 spill of 0.3 bbl on 5 Nov 2026 (INS-0062-0207), class minor.\nSR-02 breach: contained after about 5.2 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0062-028, MNT-0062-028]\nWELL-0077 spill of 0.7 bbl on 5 Nov 2026 (INS-0077-0204), class minor.\nSR-02 breach: contained after about 5 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0077-026, MNT-0077-026]\nWELL-0113 spill of 0.5 bbl on 19 Nov 2026 (INS-0113-0213), class minor.\nSR-02 met: contained after about 2.7 hours, against a 4-hour limit. [report:MNT-0113-032, MNT-0113-032]\nWELL-0114 spill of 0.5 bbl on 12 Nov 2026 (INS-0114-0210), class minor.\nSR-02 met: contained after about 3.1 hours, against a 4-hour limit. [report:MNT-0114-027, MNT-0114-027]\nWELL-0117 spill of 2.3 bbl on 12 Nov 2026 (INS-0117-0196), class moderate.\nSR-02 breach: contained after about 7.4 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0117-023, MNT-0117-023]\nWELL-0119 spill of 6.0 bbl on 5 Nov 2026 (INS-0119-0209), class reportable.\nSR-01 met: the written notice was filed after 7 hours (REG-0119-001), within the 12-hour limit.\nSR-03 met: remediation was verified by the agency (REG-0119-002).\nSR-02 met: contained after about 1.9 hours, against a 4-hour limit. [report:MNT-0119-029, MNT-0119-029]\nWELL-0134 spill of 0.5 bbl on 12 Nov 2026 (INS-0134-0208), class minor.\nSR-02 met: contained after about 1.7 hours, against a 4-hour limit. [report:MNT-0134-032, MNT-0134-032]\nWELL-0138 spill of 1.2 bbl on 5 Nov 2026 (INS-0138-0211), class moderate.\nSR-02 met: contained after about 3.6 hours, against a 4-hour limit. [report:MNT-0138-036, MNT-0138-036]\nWELL-0143 spill of 0.2 bbl on 12 Nov 2026 (INS-0143-0179), class minor.\nSR-02 met: contained after about 2.4 hours, against a 4-hour limit. [report:MNT-0143-027, MNT-0143-027]\nWELL-0151 spill of 0.7 bbl on 19 Nov 2026 (INS-0151-0209), class minor.\nSR-02 met: contained after about 1.8 hours, against a 4-hour limit. [report:MNT-0151-028, MNT-0151-028]\nWELL-0169 spill of 0.4 bbl on 19 Nov 2026 (INS-0169-0211), class minor.\nSR-02 met: contained after about 2.3 hours, against a 4-hour limit. [report:MNT-0169-024, MNT-0169-024]\nWELL-0181 spill of 1.5 bbl on 12 Nov 2026 (INS-0181-0212), class moderate.\nSR-02 breach: contained after about 8.4 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0181-029, MNT-0181-029]\nWELL-0189 spill of 1.3 bbl on 12 Nov 2026 (INS-0189-0212), class moderate.\nSR-02 breach: contained after about 7.1 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0189-036, MNT-0189-036]\nWELL-0194 spill of 0.4 bbl on 19 Nov 2026 (INS-0194-0209), class minor.\nSR-02 met: contained after about 3.6 hours, against a 4-hour limit. [report:MNT-0194-039, MNT-0194-039]\nWELL-0200 spill of 0.6 bbl on 12 Nov 2026 (INS-0200-0210), class minor.\nSR-02 breach: contained after about 8.1 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0200-027, MNT-0200-027]\nWELL-0203 spill of 4.3 bbl on 19 Nov 2026 (INS-0203-0213), class moderate.\nSR-02 met: contained after about 2.2 hours, against a 4-hour limit. [report:MNT-0203-030, MNT-0203-030]\nWELL-0225 spill of 1.6 bbl on 12 Nov 2026 (INS-0225-0208), class moderate.\nSR-02 met: contained after about 2 hours, against a 4-hour limit. [report:MNT-0225-032, MNT-0225-032]\nWELL-0235 spill of 0.5 bbl on 26 Nov 2026 (INS-0235-0212), class minor.\nSR-02 breach: contained after about 7.7 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0235-028, MNT-0235-028]\nWELL-0240 spill of 1.6 bbl on 26 Nov 2026 (INS-0240-0211), class moderate.\nSR-02 met: contained after about 2.8 hours, against a 4-hour limit. [report:MNT-0240-036, MNT-0240-036]\nWELL-0246 spill of 0.1 bbl on 12 Nov 2026 (INS-0246-0126), class minor.\nSR-02 breach: contained after about 7.7 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0246-016, MNT-0246-016]\nWELL-0253 spill of 2.1 bbl on 12 Nov 2026 (INS-0253-0209), class moderate.\nSR-02 met: contained after about 2 hours, against a 4-hour limit. [report:MNT-0253-030, MNT-0253-030]\nWELL-0281 spill of 0.6 bbl on 12 Nov 2026 (INS-0281-0207), class minor.\nSR-02 met: contained after about 2.7 hours, against a 4-hour limit. [report:MNT-0281-028, MNT-0281-028]\nWELL-0287 spill of 2.4 bbl on 5 Nov 2026 (INS-0287-0208), class moderate.\nSR-02 met: contained after about 1.8 hours, against a 4-hour limit. [report:MNT-0287-027, MNT-0287-027]\nWELL-0299 spill of 0.6 bbl on 26 Nov 2026 (INS-0299-0210), class minor.\nSR-02 met: contained after about 3.6 hours, against a 4-hour limit. [report:MNT-0299-034, MNT-0299-034]\nWELL-0331 spill of 0.9 bbl on 5 Nov 2026 (INS-0331-0206), class minor.\nSR-02 breach: contained after about 4.8 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0331-028, MNT-0331-028]\nWELL-0332 spill of 2.5 bbl on 19 Nov 2026 (INS-0332-0211), class moderate.\nSR-02 met: contained after about 2.2 hours, against a 4-hour limit. [report:MNT-0332-033, MNT-0332-033]\nWELL-0381 spill of 4.5 bbl on 5 Nov 2026 (INS-0381-0205), class moderate.\nSR-02 breach: contained after about 6 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0381-032, MNT-0381-032]\nWELL-0383 spill of 4.4 bbl on 19 Nov 2026 (INS-0383-0211), class moderate.\nSR-02 met: contained after about 1.7 hours, against a 4-hour limit. [report:MNT-0383-027, MNT-0383-027]\nWELL-0390 spill of 0.6 bbl on 19 Nov 2026 (INS-0390-0209), class minor.\nSR-02 met: contained after about 3.2 hours, against a 4-hour limit. [report:MNT-0390-030, MNT-0390-030]\nWELL-0404 spill of 3.2 bbl on 19 Nov 2026 (INS-0404-0206), class moderate.\nSR-02 met: contained after about 3.4 hours, against a 4-hour limit. [report:MNT-0404-032, MNT-0404-032]\nWELL-0405 spill of 0.7 bbl on 5 Nov 2026 (INS-0405-0209), class minor.\nSR-02 breach: contained after about 6.2 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0405-029, MNT-0405-029]\nWELL-0411 spill of 0.4 bbl on 19 Nov 2026 (INS-0411-0139), class minor.\nSR-02 met: contained after about 2.7 hours, against a 4-hour limit. [report:MNT-0411-021, MNT-0411-021]\nWELL-0420 spill of 0.9 bbl on 19 Nov 2026 (INS-0420-0211), class minor.\nSR-02 breach: contained after about 7 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0420-032, MNT-0420-032]\nWELL-0422 spill of 2.2 bbl on 5 Nov 2026 (INS-0422-0205), class moderate.\nSR-02 breach: contained after about 8.6 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0422-030, MNT-0422-030]\nWELL-0429 spill of 0.5 bbl on 12 Nov 2026 (INS-0429-0210), class minor.\nSR-02 met: contained after about 3.7 hours, against a 4-hour limit. [report:MNT-0429-033, MNT-0429-033]\nWELL-0450 spill of 0.4 bbl on 19 Nov 2026 (INS-0450-0208), class minor.\nSR-02 breach: contained after about 5.8 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0450-026, MNT-0450-026]\nWELL-0459 spill of 0.2 bbl on 26 Nov 2026 (INS-0459-0212), class minor.\nSR-02 breach: contained after about 4.6 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0459-030, MNT-0459-030]\nWELL-0467 spill of 0.9 bbl on 19 Nov 2026 (INS-0467-0209), class minor.\nSR-02 breach: contained after about 6.6 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0467-033, MNT-0467-033]\nWELL-0487 spill of 0.3 bbl on 12 Nov 2026 (INS-0487-0209), class minor.\nSR-02 met: contained after about 2.7 hours, against a 4-hour limit. [report:MNT-0487-023, MNT-0487-023]\nWELL-0492 spill of 1.0 bbl on 26 Nov 2026 (INS-0492-0130), class moderate.\nSR-02 breach: contained after about 8.4 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0492-019, MNT-0492-019]\nWELL-0494 spill of 6.2 bbl on 26 Nov 2026 (INS-0494-0209), class reportable.\nSR-01 breach: reported after 38 hours (REG-0494-001), against a 12-hour limit. This led to notice of violation REG-0494-002 with a USD 5,000 fine, open.\nRC-04 met: the response REG-0494-003 was filed on 1 Jan 2027 (due 16 Jan 2027). [REG-0494-002]\nSR-03 met: remediation was verified by the agency (REG-0494-004).\nSR-02 breach: contained after about 6.5 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0494-025, MNT-0494-025]\nWELL-0501 spill of 0.8 bbl on 19 Nov 2026 (INS-0501-0205), class minor.\nSR-02 met: contained after about 3.8 hours, against a 4-hour limit. [report:MNT-0501-026, MNT-0501-026]\nWELL-0505 spill of 0.5 bbl on 5 Nov 2026 (INS-0505-0210), class minor.\nSR-02 met: contained after about 1.2 hours, against a 4-hour limit. [report:MNT-0505-031, MNT-0505-031]\nWELL-0564 spill of 5.7 bbl on 26 Nov 2026 (INS-0564-0181), class reportable.\nSR-01 breach: reported after 55 hours (REG-0564-001), against a 12-hour limit. This led to notice of violation REG-0564-003 with a USD 7,500 fine, open.\nRC-04 pending: notice of violation REG-0564-003 needs a response by 25 Jan 2027.\nSR-03 met: remediation was verified by the agency (REG-0564-002).\nSR-02 breach: contained after about 5 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0564-031, MNT-0564-031]\nWELL-0572 spill of 0.3 bbl on 5 Nov 2026 (INS-0572-0207), class minor.\nSR-02 breach: contained after about 5.6 hours, against a 4-hour limit (found only in the repair report). [report:MNT-0572-024, MNT-0572-024]\nWELL-0574 spill of 1.0 bbl on 5 Nov 2026 (INS-0574-0209), class moderate.\nSR-02 met: contained after about 1.3 hours, against a 4-hour limit. [report:MNT-0574-030, MNT-0574-030]\nWELL-0589 spill of 0.5 bbl on 26 Nov 2026 (INS-0589-0212), class minor.\nSR-02 met: contained after about 1.6 hours, against a 4-hour limit. [report:MNT-0589-031, MNT-0589-031]",
+    "answer_source": "verified facts",
+    "tool_calls": [
+      {
+        "name": "regulatory_events",
+        "args": {
+          "end": "2026-11-30",
+          "scope": "all",
+          "event_type": "spill",
+          "start": "2026-11-01"
+        },
+        "ok": true,
+        "error": null
+      },
+      {
+        "name": "spills",
+        "args": {
+          "start": "2026-11-01",
+          "scope": "all",
+          "end": "2026-11-30"
+        },
+        "ok": true,
+        "error": null
+      },
+      {
+        "name": "compliance_audit",
+        "args": {
+          "scope": "all",
+          "start": "2026-11-01",
+          "end": "2026-11-30"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [],
+    "warnings": [
+      "Showing the verified facts directly: the model rate limit was nearly used up, so the wording step was skipped."
+    ],
+    "error": null,
+    "verification": {
+      "status": "NEEDS_REVIEW",
+      "reasons": [
+        "No independent recomputation exists for regulatory_events, so its result is not verified here.",
+        "No independent recomputation exists for compliance_audit, so its result is not verified here."
+      ],
+      "evaluation_id": "EV-D42FFE869A"
+    },
+    "citations": [
+      "INS-0035-0210",
+      "INS-0062-0207",
+      "INS-0077-0204",
+      "INS-0113-0213",
+      "INS-0114-0210",
+      "INS-0117-0196",
+      "INS-0119-0209",
+      "INS-0134-0208",
+      "INS-0138-0211",
+      "INS-0143-0179",
+      "INS-0151-0209",
+      "INS-0169-0211",
+      "INS-0181-0212",
+      "INS-0189-0212",
+      "INS-0194-0209",
+      "INS-0200-0210",
+      "INS-0203-0213",
+      "INS-0225-0208",
+      "INS-0235-0212",
+      "INS-0240-0211",
+      "INS-0246-0126",
+      "INS-0253-0209",
+      "INS-0281-0207",
+      "INS-0287-0208",
+      "INS-0299-0210",
+      "INS-0331-0206",
+      "INS-0332-0211",
+      "INS-0381-0205",
+      "INS-0383-0211",
+      "INS-0390-0209",
+      "INS-0404-0206",
+      "INS-0405-0209",
+      "INS-0411-0139",
+      "INS-0420-0211",
+      "INS-0422-0205",
+      "INS-0429-0210",
+      "INS-0450-0208",
+      "INS-0459-0212",
+      "INS-0467-0209",
+      "INS-0487-0209",
+      "INS-0492-0130",
+      "INS-0494-0209",
+      "INS-0501-0205",
+      "INS-0505-0210",
+      "INS-0564-0181",
+      "INS-0572-0207",
+      "INS-0574-0209",
+      "INS-0589-0212",
+      "SR-02",
+      "MNT-0035-030",
+      "report:MNT-0035-030",
+      "MNT-0062-028",
+      "report:MNT-0062-028",
+      "MNT-0077-026",
+      "report:MNT-0077-026",
+      "MNT-0113-032",
+      "report:MNT-0113-032",
+      "MNT-0114-027",
+      "report:MNT-0114-027",
+      "MNT-0117-023",
+      "report:MNT-0117-023",
+      "SR-01",
+      "REG-0119-001",
+      "SR-03",
+      "REG-0119-002",
+      "MNT-0119-029",
+      "report:MNT-0119-029",
+      "MNT-0134-032",
+      "report:MNT-0134-032",
+      "MNT-0138-036",
+      "report:MNT-0138-036",
+      "MNT-0143-027",
+      "report:MNT-0143-027",
+      "MNT-0151-028",
+      "report:MNT-0151-028",
+      "MNT-0169-024",
+      "report:MNT-0169-024",
+      "MNT-0181-029",
+      "report:MNT-0181-029",
+      "MNT-0189-036",
+      "report:MNT-0189-036",
+      "MNT-0194-039",
+      "report:MNT-0194-039",
+      "MNT-0200-027",
+      "report:MNT-0200-027",
+      "MNT-0203-030",
+      "report:MNT-0203-030",
+      "MNT-0225-032",
+      "report:MNT-0225-032",
+      "MNT-0235-028",
+      "report:MNT-0235-028",
+      "MNT-0240-036",
+      "report:MNT-0240-036",
+      "MNT-0246-016",
+      "report:MNT-0246-016",
+      "MNT-0253-030",
+      "report:MNT-0253-030",
+      "MNT-0281-028",
+      "report:MNT-0281-028",
+      "MNT-0287-027",
+      "report:MNT-0287-027",
+      "MNT-0299-034",
+      "report:MNT-0299-034",
+      "MNT-0331-028",
+      "report:MNT-0331-028",
+      "MNT-0332-033",
+      "report:MNT-0332-033",
+      "MNT-0381-032",
+      "report:MNT-0381-032",
+      "MNT-0383-027",
+      "report:MNT-0383-027",
+      "MNT-0390-030",
+      "report:MNT-0390-030",
+      "MNT-0404-032",
+      "report:MNT-0404-032",
+      "MNT-0405-029",
+      "report:MNT-0405-029",
+      "MNT-0411-021",
+      "report:MNT-0411-021",
+      "MNT-0420-032",
+      "report:MNT-0420-032",
+      "MNT-0422-030",
+      "report:MNT-0422-030",
+      "MNT-0429-033",
+      "report:MNT-0429-033",
+      "MNT-0450-026",
+      "report:MNT-0450-026",
+      "MNT-0459-030",
+      "report:MNT-0459-030",
+      "MNT-0467-033",
+      "report:MNT-0467-033",
+      "MNT-0487-023",
+      "report:MNT-0487-023",
+      "MNT-0492-019",
+      "report:MNT-0492-019",
+      "REG-0494-001",
+      "REG-0494-002",
+      "RC-04",
+      "REG-0494-003",
+      "REG-0494-004",
+      "MNT-0494-025",
+      "report:MNT-0494-025",
+      "MNT-0501-026",
+      "report:MNT-0501-026",
+      "MNT-0505-031",
+      "report:MNT-0505-031",
+      "REG-0564-001",
+      "REG-0564-003",
+      "REG-0564-002",
+      "MNT-0564-031",
+      "report:MNT-0564-031",
+      "MNT-0572-024",
+      "report:MNT-0572-024",
+      "MNT-0574-030",
+      "report:MNT-0574-030",
+      "MNT-0589-031",
+      "report:MNT-0589-031"
+    ],
+    "visuals": [
+      "table",
+      "table",
+      "table"
+    ]
+  },
+  {
+    "id": "Q9a",
+    "user": "Robert Hayes",
+    "text": "How many recalled pumps are still in the ground, and in which areas?",
+    "seconds": 58.5,
+    "answer": "I don't have any record of previously discussed recalled pumps in our conversation history. Could you please specify which pumps or wells you are referring to?",
+    "answer_source": "model",
+    "tool_calls": [
+      {
+        "name": "recall_discussed",
+        "args": {
+          "topic": "recalled pumps"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [
+      {
+        "type": "missing_evidence",
+        "text": "No earlier conversation found for this user.",
+        "refs": []
+      }
+    ],
+    "warnings": [],
+    "error": null,
+    "verification": {
+      "status": "NEEDS_REVIEW",
+      "reasons": [
+        "No independent recomputation exists for recall_discussed, so its result is not verified here.",
+        "No independent rule classifies this question, so it cannot be confirmed that the tools used answer what was asked."
+      ],
+      "evaluation_id": "EV-D0B8ED5C84"
+    },
+    "citations": [],
+    "visuals": []
+  }
+]

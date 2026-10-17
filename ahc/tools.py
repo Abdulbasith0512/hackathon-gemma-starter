@@ -262,7 +262,13 @@ def _maintenance_record(ctx, a):
     return _call(ctx, "maintenance_record", "maintenance_record", a)
 
 
-@tool("regulatory_events", "Regulator events (spill reports, notices of violation, site inspections) and fines in a period for a well/area/field.",
+@tool("gas_response", "Gas-odor operator notes (gas smell, rotten-egg smell, H2S alarm) in a period and whether a field response (a repair job or a manual inspection on that well) started within the Operations SOP OPS-1 deadline; lists every report with Met/Missed.",
+      [SCOPE, PERIOD, START, END])
+def _gas_response(ctx, a):
+    return _call(ctx, "gas_response", "gas_response", a)
+
+
+@tool("regulatory_events","Regulator events (spill reports, notices of violation, site inspections) and fines in a period for a well/area/field.",
       [SCOPE, PERIOD, ("event_type", "string", "spill_report_filed, notice_of_violation, site_inspection or nov_response_filed", False), ("status", "string", "open or closed", False), START, END])
 def _reg(ctx, a):
     return _call(ctx, "regulatory_events", "regulatory_events", a)

@@ -18,7 +18,7 @@ from google.genai import types
 
 from . import router
 from . import tools as toolbox
-from . import visuals
+from . import verify, visuals
 from .analyst import Analyst
 from .tools import Ctx
 
@@ -214,6 +214,7 @@ class Agent:
     store: object
     llm: object = None
     extra_prompt: str = ""
+    audit: object = None          # an AuditLog; every answer is verified, and recorded here when one is given
 
     def __post_init__(self):
         self.llm = self.llm or GemmaLLM()
@@ -249,6 +250,7 @@ class Agent:
         contents = self._history(conv_id, user_id) + [types.Content(role="user", parts=user_parts)]
         user_msg_id = self.store.add_message(conv_id, user_id, "user", message)
         results, calls, final_text = [], [], None
+        dropped = withheld = None     # the model's own wording when it was set aside, and why (kept for the audit log)
         system, tool_list = self._system(user_id), toolbox.declarations(toolbox.wants_write_tools(message))
         skipped, down_note, cache, forced = False, None, {}, False
         for round_no in range(MAX_ROUNDS):
@@ -280,12 +282,13 @@ class Agent:
                     if routed:
                         down_note = "The model answered without consulting the records, so the verified tools were used instead."
                         self._run_routed(ctx, routed, results, calls)
-                        final_text = None
+                        dropped, final_text = final_text, None
                         break
                     if not use_force and round_no == 0:
                         forced = True  # one more try, this time requiring a tool call
                         continue
                     if re.search(r"\d", final_text) or _ID.search(final_text) or _names_in(final_text, [u["name"] for u in self.analyst.users.values() if u.get("name")]):
+                        dropped, withheld = final_text, "The model answered without consulting any records and its wording contained numbers, record IDs or names; it was withheld."
                         final_text = None  # numbers, record IDs and people's names need records behind them
                 break
             contents.append(cand.content)
@@ -303,12 +306,14 @@ class Agent:
                     calls.append({"name": fc.name, "args": args, "ok": "error" not in res, "error": res.get("error")})
                 answers.append(types.Part.from_function_response(name=fc.name, response=to_llm(res)))
             contents.append(types.Content(role="user", parts=answers))
-        return self._finish(ctx, message, user_msg_id, results, calls, final_text, skipped, down_note)
+        return self._finish(ctx, message, user_msg_id, results, calls, final_text, skipped, down_note, dropped, withheld)
 
-    def _finish(self, ctx: Ctx, message: str, user_msg_id: int, results: list[dict], calls: list[dict], final_text: str | None, skipped: bool = False, down_note: str | None = None) -> dict:
+    def _finish(self, ctx: Ctx, message: str, user_msg_id: int, results: list[dict], calls: list[dict], final_text: str | None, skipped: bool = False, down_note: str | None = None,
+                dropped: str | None = None, withheld: str | None = None) -> dict:
         ok = [r for r in results if "error" not in r]
         warnings = []
         source = "model"
+        generated, ungrounded = dropped or final_text, []      # the model's own wording, kept for the audit log even when the verified facts are shown instead
         if final_text:
             people = [u["name"] for u in self.analyst.users.values() if u.get("name")] if any(r.get("tool") == "maintenance_record" for r in ok) else []
             ungrounded = ground_check(final_text, ok, message, people)
@@ -317,6 +322,7 @@ class Agent:
                 final_text = None
         if not final_text:
             final_text = deterministic_answer(results) or "I could not find an answer in the records."
+            generated = generated or final_text         # no model wording existed (or it was skipped): the generated answer is the verified facts
             source = "verified facts"
             if down_note:
                 warnings.append(down_note)
@@ -343,7 +349,19 @@ class Agent:
                 uniq_flags.append(f)
         payload = {"answer": final_text, "answer_source": source, "blocks": blocks, "citations": citations, "flags": uniq_flags, "pending": pending,
                    "tool_calls": calls, "errors": errors, "warnings": warnings, "as_of": self.analyst.as_of_s}
+        # Verify what is about to be shown against the dataset (never rewriting it), then store the answer and the verdict.
+        try:
+            ver = verify.verify_answer(self.analyst, message, final_text, ungrounded, results, calls, citations, source, withheld)
+        except Exception as e:  # noqa: BLE001 - a verifier fault must never lose the answer
+            ver = {"status": "NEEDS_REVIEW", "reasons": [f"Verification could not run ({type(e).__name__}: {e})."], "checks": []}
+        payload["verification"] = {"status": ver["status"], "reasons": ver["reasons"]}
         msg_id = self.store.add_message(ctx.conv_id, ctx.user_id, "assistant", final_text, payload)
+        if self.audit is not None:
+            try:
+                payload["verification"]["evaluation_id"] = self.audit.record(question=message, generated=generated, shown=final_text, evidence_refs=[c["id"] for c in citations],
+                                                                              verification=ver, tools=[c["name"] for c in calls], conv_id=ctx.conv_id, turn_id=msg_id)
+            except Exception:  # noqa: BLE001
+                payload["verification"]["evaluation_id"] = None
         ents = []
         for r in ok:
             ents += [("well", w) for w in (r.get("entities") or {}).get("wells", [])]

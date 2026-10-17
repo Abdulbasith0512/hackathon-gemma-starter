@@ -8,6 +8,7 @@ All inspection reads go through `_eff`, the single place where corrections are a
 saved correction changes every later answer for every user. Originals are always kept alongside.
 """
 
+import json
 import re
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -81,6 +82,16 @@ class Analyst:
         self._override = {}
         for r in conn.execute("SELECT note_id, inspection_id, text, author_user_id, created_at FROM notes WHERE note_type='correction' AND inspection_id IS NOT NULL ORDER BY created_at"):
             self._override[r["inspection_id"]] = dict(r)
+        # Structured corrections written into the dataset itself (note_type 'data_correction': inspection, field, original and corrected value).
+        # They are treated like saved corrections, so every tool sees the corrected value and the original stays one click away.
+        self._dataset_corr: dict[str, dict[str, dict]] = {}
+        for r in conn.execute("SELECT note_id, asset_id, inspection_id, text, author_user_id, created_at, raw FROM notes WHERE note_type='data_correction' AND inspection_id IS NOT NULL ORDER BY created_at"):
+            d = json.loads(r["raw"] or "{}")
+            if d.get("field") in CORRECTABLE and d.get("corrected_value") is not None:
+                self._dataset_corr.setdefault(r["inspection_id"], {})[d["field"]] = {
+                    "correction_id": r["note_id"], "target_type": "inspection", "target_id": r["inspection_id"], "asset_id": r["asset_id"], "field": d["field"],
+                    "original_value": d.get("original_value"), "previous_value": d.get("original_value"), "new_value": d["corrected_value"], "reason": r["text"],
+                    "author_user_id": r["author_user_id"], "created_at": r["created_at"], "scope_type": "dataset", "scope_value": None, "status": "active", "supersedes_id": None, "source": "dataset"}
         row = conn.execute("SELECT MIN(inspected_date) m FROM inspections").fetchone()
         self.data_min = date.fromisoformat(row["m"]) if row and row["m"] else None
 
@@ -172,7 +183,7 @@ class Analyst:
         d["orig"] = {f: d.get(f) for f in CORRECTABLE}
         d["orig"]["spill_detected"] = bool(d["orig"]["spill_detected"])
         d["corrections"] = []
-        for f, c in self._corr.get(d["inspection_id"], {}).items():
+        for f, c in {**self._dataset_corr.get(d["inspection_id"], {}), **self._corr.get(d["inspection_id"], {})}.items():  # a saved correction wins over the dataset's
             if f in CORRECTABLE:
                 d[f] = c["new_value"]
                 d["corrections"].append(c)
@@ -1215,6 +1226,54 @@ class Analyst:
         return self.result("maintenance_record", f"Who carried out {m['maintenance_id']}", cites,
                            data={"maintenance_id": m["maintenance_id"], "asset_id": m["asset_id"], "technician_user_id": t["user_id"], "technician_name": t["name"], "technician_status": t["status"]},
                            facts=facts, flags=flags, visuals={"table": table}, natural="table", entities={"wells": [m["asset_id"]]})
+
+    def gas_response(self, scope: str | None = None, period: str | None = None, start: str | None = None, end: str | None = None) -> dict:
+        """Gas-odor operator notes and whether a field response started in time. The definitions and the deadlines are read from the Operations SOP (OPS-1):
+        a response is a maintenance job on that well, or a manual inspection of it, starting after the note and within the limit for the note's date."""
+        ids, label = self.resolve_scope(scope)
+        per = self.period(period, start, end, default="last 90 days")
+        sop = self.c.execute("SELECT s.doc_id, s.section_id, s.heading, s.text, d.title FROM sections s JOIN documents d ON d.doc_id = s.doc_id WHERE d.kind='sop' AND s.heading LIKE 'OPS-1%' LIMIT 1").fetchone()
+        if sop is None:
+            raise ToolError("The gas-odor response rule (OPS-1) is not in the SOPs that were loaded, so response deadlines cannot be checked.")
+        lim = {m.group(2).lower(): (int(m.group(1)), m.group(3)) for m in re.finditer(r"\*\*(\d+)\s*hours?\*\*\s+for reports noted (before|from)\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})", sop["text"])}
+        if set(lim) != {"before", "from"} or lim["before"][1] != lim["from"][1]:
+            raise ToolError("Could not read the OPS-1 response deadlines (hours before and from a date) from the Operations SOP.")
+        cutoff = datetime.strptime(lim["from"][1], "%d %B %Y" if len(lim["from"][1].split()[1]) > 3 else "%d %b %Y").date()
+        ref = f"{sop['doc_id'].split(':', 1)[1]}#{sop['section_id']}"
+        gas = re.compile(r"(?i)smell(?:ed)?\s+(?:of\s+)?gas|gas\s+(?:smell|odou?r)|rotten[\s-]*egg|h2s[^.]{0,40}alarm|alarm[^.]{0,40}h2s")
+        q = f"SELECT note_id, asset_id, created_at, text FROM notes WHERE note_type='operator_note' AND asset_id IN ({','.join('?' * len(ids))}) AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=? ORDER BY created_at, note_id"
+        notes = [n for n in self.c.execute(q, [*ids, per.start.isoformat(), per.end.isoformat()]) if gas.search(n["text"] or "")]
+        cites = Cites()
+        cites.add(ref, "document", f"{sop['title']} · {sop['heading']}")
+        ts = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+        shown = lambda s: s[:16].replace("T", " ") + " UTC"
+        rows, facts, met = [], [], 0
+        for n in notes:
+            at, aid = n["created_at"], n["asset_id"]
+            m = self.c.execute("SELECT maintenance_id AS rid, started_at AS at FROM maintenance WHERE asset_id=? AND started_at>? ORDER BY started_at LIMIT 1", (aid, at)).fetchone()
+            i = self.c.execute("SELECT inspection_id AS rid, inspected_at AS at FROM inspections WHERE asset_id=? AND method='manual' AND inspected_at>? ORDER BY inspected_at LIMIT 1", (aid, at)).fetchone()
+            resp = min((r for r in (m, i) if r is not None), key=lambda r: r["at"], default=None)
+            limit = lim["before"][0] if ts(at).date() < cutoff else lim["from"][0]
+            hours = (ts(resp["at"]) - ts(at)).total_seconds() / 3600 if resp else None
+            ok = hours is not None and hours <= limit + 1e-9
+            met += ok
+            area = self.areas.get(self.wells[aid]["area_id"], {}).get("name", "")
+            cites.add(n["note_id"], "note", f"{n['note_id']} · operator note · {aid} · {shown(at)}")
+            if resp:
+                cites.add(resp["rid"], "maintenance" if resp["rid"].startswith("MNT-") else "inspection", f"{resp['rid']} · {shown(resp['at'])}")
+            rows.append([aid, area, shown(at), f"{resp['rid']} · {shown(resp['at'])}" if resp else "none", round(hours, 1) if hours is not None else "—",
+                         shown((ts(at) + timedelta(hours=limit)).isoformat()) + f" ({limit} h)", "Met" if ok else "Missed"])
+            if not ok:
+                facts.append({"text": f"{aid} ({area}): gas report {n['note_id']} at {shown(at)}; " + (f"first response {resp['rid']} after {hours:.1f} h, against a {limit}-hour limit." if resp else f"no response is recorded (limit {limit} h)."),
+                              "cites": [n["note_id"], ref] + ([resp["rid"]] if resp else [])})
+        head = {"text": f"{len(notes)} gas-odor reports from operator notes in {label}, {per.label}: {met} met the response deadline and {len(notes) - met} missed it. "
+                        f"OPS-1: a maintenance job or a manual inspection (not a drone one) must start within {lim['before'][0]} hours of a report noted before {lim['before'][1]}, and within {lim['from'][0]} hours from then.",
+                "cites": [ref]}
+        flags = [] if notes else [{"type": "missing_evidence", "text": f"No gas-odor operator notes were found in {label} for {per.label}.", "refs": []}]
+        return self.result("gas_response", f"Gas-odor reports and responses · {label}", cites, window=per.as_dict(),
+                           data={"reports": len(notes), "met": met, "missed": len(notes) - met, "limits_hours": {"before": lim["before"][0], "from": lim["from"][0]}, "cutoff": lim["from"][1]},
+                           facts=[head] + facts[:20], flags=flags, visuals={"table": {"kind": "table", "columns": ["Well", "Area", "Reported at", "Response", "Hours to response", "Deadline", "Met / Missed"], "rows": rows}},
+                           natural="table", entities={"wells": sorted({n["asset_id"] for n in notes})[:25]})
 
     def regulatory_events(self, scope: str | None = None, period: str | None = None, event_type: str | None = None, status: str | None = None,
                           start: str | None = None, end: str | None = None) -> dict:

@@ -1,0 +1,80 @@
+[
+  {
+    "id": "Q3",
+    "user": "Laura Simmons",
+    "text": "Since 1 Nov 2026, every time an operator note reports gas at a well, did we get someone out to that well in time under our operating procedures? List every report and whether the response met the deadline.",
+    "seconds": 17.1,
+    "answer": "No, not every report met the deadline; out of 26 reports since 1 Nov 2026, 17 met the deadline and 9 missed it.\n\n*   **Compliance Summary:**\n    *   Total reports: 26\n    *   Met deadline: 17\n    *   Missed deadline: 9\n*   **Example Missed Responses:**\n    *   **WELL-0163 (Northeast Block 8):** Report [CTX-0163-002] on 2026-11-03; response [MNT-0163-019] took 251.1 hours (limit 24 h).\n    *   **WELL-0341 (Northwest Block 12):** Report [CTX-0341-002] on 2026-11-19; response [INS-0341-0109] took 677.8 hours (limit 24 h).\n    *   **WELL-0332 (Northwest Block 12):** Report [CTX-0332-004] on 2026-12-03; no response recorded.\n    *   **WELL-0401 (Northwest Block 12):** Report [CTX-0401-002] on 2026-12-05; response [MNT-0401-033] took 138.2 hours (limit 24 h).\n    *   **WELL-0052 (Southwest Block 24):** Report [CTX-0052-003] on 2026-12-18; no response recorded.\n    *   **WELL-0362 (Northwest Block 12):** Report [CTX-0362-002] on 2026-12-24; response [MNT-0362-030] took 31.8 hours (limit 24 h).\n    *   **WELL-0161 (Northeast Block 8):** Report [CTX-0161-006] on 2026-12-25; response [INS-0161-0168] took 475.2 hours (limit 24 h).\n*   **Recent Deadline Changes:** For reports after 1 Jan 2027, the response deadline is 12 hours (e.g., WELL-0599 and WELL-0516 missed this newer limit).",
+    "answer_source": "model",
+    "tool_calls": [
+      {
+        "name": "gas_response",
+        "args": {
+          "scope": "all",
+          "start": "2026-11-01"
+        },
+        "ok": true,
+        "error": null
+      }
+    ],
+    "flags": [],
+    "warnings": [],
+    "error": null,
+    "citations": [
+      "operations-sop-rev2#ops-1-gas-odor-response",
+      "CTX-0163-002",
+      "MNT-0163-019",
+      "CTX-0149-004",
+      "MNT-0149-029",
+      "CTX-0165-001",
+      "MNT-0165-031",
+      "CTX-0341-002",
+      "INS-0341-0109",
+      "CTX-0091-001",
+      "MNT-0091-019",
+      "CTX-0423-002",
+      "INS-0423-0213",
+      "CTX-0059-002",
+      "INS-0059-0213",
+      "CTX-0332-004",
+      "CTX-0401-002",
+      "MNT-0401-033",
+      "CTX-0189-003",
+      "MNT-0189-037",
+      "CTX-0403-004",
+      "MNT-0403-024",
+      "CTX-0244-002",
+      "MNT-0244-026",
+      "CTX-0040-002",
+      "MNT-0040-029",
+      "CTX-0228-004",
+      "INS-0228-0144",
+      "CTX-0052-003",
+      "CTX-0370-005",
+      "MNT-0370-028",
+      "CTX-0362-002",
+      "MNT-0362-030",
+      "CTX-0161-006",
+      "INS-0161-0168",
+      "CTX-0135-009",
+      "MNT-0135-034",
+      "CTX-0324-001",
+      "MNT-0324-036",
+      "CTX-0330-003",
+      "MNT-0330-030",
+      "CTX-0599-003",
+      "INS-0599-0196",
+      "CTX-0516-002",
+      "INS-0516-0215",
+      "CTX-0425-006",
+      "INS-0425-0218",
+      "CTX-0465-005",
+      "MNT-0465-031",
+      "CTX-0137-004",
+      "MNT-0137-032"
+    ],
+    "visuals": [
+      "table"
+    ]
+  }
+]

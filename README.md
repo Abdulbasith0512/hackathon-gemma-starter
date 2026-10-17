@@ -48,7 +48,7 @@ Replay a list of questions (corrections are saved automatically) and write the a
 Question ─► Gemma (picks a tool, fills its arguments)
               │
               ▼
-        23 deterministic tools ── ahc/analyst.py: the only code that does arithmetic
+        24 deterministic tools ── ahc/analyst.py: the only code that does arithmetic
               │      │
               │      └─ effective-value layer: dataset record + active corrections (originals kept)
               ▼
@@ -69,7 +69,7 @@ Question ─► Gemma (picks a tool, fills its arguments)
 
 | Requirement | Where |
 | --- | --- |
-| Chat over metadata, inspections, repairs, reports, regulator events, notes, manuals, SOPs | `ahc/ingest.py` loads all of it; 23 tools plus full-text search of manuals, SOPs and reports |
+| Chat over metadata, inspections, repairs, reports, regulator events, notes, manuals, SOPs | `ahc/ingest.py` loads all of it; 24 tools plus full-text search of manuals, SOPs and reports |
 | Right visual, explicit request respected | `ahc/visuals.py`; status card, table, line, bar, map, heatmap |
 | Cite exact records and documents | every tool returns citations; the evidence drawer opens the record or the manual section (`ahc/evidence.py`) |
 | Correct status, downtime, spills, costs, windows, compliance | `ahc/analyst.py`, `ahc/periods.py`, `ahc/rules.py`; golden tests against the official examples |
@@ -84,12 +84,14 @@ Correction flow: say that a value is wrong, the copilot shows the **original val
 
 **Data lineage:** in a heatmap, click any cell or any total (area, month or grand total) to open its lineage: the contributing inspection records with their source file and line, the corrections applied, the detections that were excluded and why, the date and scope filters, and the exact calculation (for example `37 + 26 + 35 + 43 = 141`). The panel checks that the number of listed records equals the number shown. The totals are computed on the server; the browser adds nothing up.
 
+**Answer verification and audit log:** after every answer, `ahc/verify.py` checks it against the dataset before it is returned: the model's wording is grounded, every citation and record ID exists, headline numbers are recomputed from the raw tables (spill counts and volume, downtime days, production status against the manual's threshold, repair counts and cost, the technician by joining `users`, gas-report deadlines against the SOP limits), and the question's own wording (pattern rules, not the model) points to the tool used. The verdict is `PASS`, `FAIL` or `NEEDS_REVIEW` and is shown under the answer. `PASS` means the numbers and records shown were recomputed independently and agree; anything that cannot be established independently (no recomputation for the tool, unclassified or ambiguous question, no records consulted) is `NEEDS_REVIEW`. Answers are never rewritten: the model's original wording and its evidence are kept. Each evaluation is written to a separate SQLite file (`AHC_AUDIT_DB`, default next to the memory database: evaluation ID, conversation and turn, question, generated and shown answer, evidence references, status, reasons, dataset version, time). `GET /api/eval/report` and the **Verify** page show the totals with every failed answer and its reason, without user or conversation identifiers.
+
 Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation**, **Unconfirmed**, **No evidence**, **Out of date** (stale recorded status), **User rule**.
 
 ## Tests
 
 ```powershell
-.venv\Scripts\python.exe -m unittest discover        # 292 tests
+.venv\Scripts\python.exe -m unittest discover        # 325 tests
 ```
 
 - `tests/test_ahc_golden.py`, `test_ahc_memory.py`: the official sample dataset against the example scenarios (expected values live **only** in tests; skipped if `data/sample-data` is absent).
@@ -99,6 +101,9 @@ Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation
 - `tests/test_ahc_ui.py`: the front-end files parse and are wired together.
 - `tests/test_ahc_lineage.py`: heatmap lineage reconciled against a raw-table recount and the source files, and proof that unsupported claims (digits, spelled-out numbers, invented IDs) cannot bypass verification.
 - `tests/test_ahc_technician.py`: who carried out a repair, for a matched technician, a missing technician ID and an ID with no matching user; a guessed name or user ID is rejected.
+- `tests/test_ahc_dataset_corrections.py`: structured `data_correction` notes inside the dataset are applied like saved corrections (original kept, saved corrections still win).
+- `tests/test_ahc_verify.py`: verification and the audit log: a correct answer, a wrong calculation, an unsupported claim, an invalid citation, an ambiguous question, rows read back from SQLite, and the report endpoint with no private fields.
+- `tests/test_ahc_gas_response.py`: gas-odor reports against the Operations SOP response deadline (limits and cutoff date read from the SOP; manual inspections and jobs count, drone inspections and earlier records do not).
 - The original 124 starter tests (provider, thinking, images, retries, task framework) still pass.
 
 ## Limits worth knowing

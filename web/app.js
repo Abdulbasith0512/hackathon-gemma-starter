@@ -176,12 +176,26 @@ function signalsHTML(flags) {
 function scrollDown() { const m = $("#messages"); m.scrollTop = m.scrollHeight; }
 function addUser(text) { const el = document.createElement("div"); el.className = "msg user"; el.innerHTML = `<div class="bubble">${esc(text)}</div>`; $("#messages").appendChild(el); scrollDown(); return el; }
 
+/* Verification verdict for an answer: PASS only when numbers were recomputed independently; NEEDS_REVIEW when correctness could not be established. */
+const VERIFY_LABEL = { PASS: "Verified", FAIL: "Failed verification", NEEDS_REVIEW: "Needs review" };
+function verifyHTML(v) {
+  if (!v || !v.status) return "";
+  return `<div class="verify ${esc(v.status)}" aria-label="Answer verification"><span class="tag">${esc(VERIFY_LABEL[v.status] || v.status)}</span><span>${(v.reasons || []).slice(0, 3).map(esc).join(" · ") || "Numbers and records recomputed from the dataset."}${v.evaluation_id ? ` <span class="sub">${esc(v.evaluation_id)}</span>` : ""}</span></div>`;
+}
+async function loadEval() {
+  const r = await api("/api/eval/report"), t = r.totals, body = $("#eval-body");
+  const list = (rows) => rows.length ? `<div class="tablewrap"><table class="data"><thead><tr><th>ID</th><th>Question</th><th>Answer as generated</th><th>Why</th><th>Evidence</th></tr></thead><tbody>${rows.map((x) => `<tr><td>${esc(x.evaluation_id)}</td><td>${esc(x.question)}</td><td>${esc((x.generated_answer || "").slice(0, 300))}</td><td>${x.reasons.map(esc).join("<br>")}</td><td>${x.evidence.slice(0, 6).map(chip).join(" ")}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">None.</div>`;
+  body.innerHTML = `<h2>Answer verification</h2><p class="lead">Every answer is checked against the dataset by recomputation, then recorded. PASS means the numbers and records shown were recomputed independently and match; NEEDS_REVIEW means correctness could not be established. Nothing is rewritten.</p>
+    <div class="verify-totals"><span class="verify PASS"><span class="tag">PASS ${t.PASS}</span></span><span class="verify FAIL"><span class="tag">FAIL ${t.FAIL}</span></span><span class="verify NEEDS_REVIEW"><span class="tag">NEEDS_REVIEW ${t.NEEDS_REVIEW}</span></span><span class="sub">${t.total} answers · ${r.dataset_versions.map(esc).join("; ")}</span></div>
+    <h2>Failed</h2>${list(r.failed)}<h2>Needs review</h2>${list(r.needs_review)}`;
+}
 function renderAssistant(p) {
   const el = document.createElement("div"); el.className = "msg assistant";
   const how = (p.tool_calls || []).length ? `<details class="how"><summary>How this was worked out</summary><ul>${p.tool_calls.map((c) => `<li><code>${esc(c.name)}(${esc(Object.entries(c.args).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", "))})</code> ${c.ok ? "✓" : "✗ " + esc(c.error || "")}</li>`).join("")}</ul><div>As-of date ${esc(p.as_of || "")}. ${p.answer_source === "model" ? "Wording by Gemma; every figure was checked against the tool results." : "Shown as verified facts straight from the records."}</div></details>` : "";
   el.innerHTML = `<div class="who"><span class="avatar">A</span> Copilot</div><div class="answer">${renderText(p.answer)}${p.answer_source === "verified facts" ? `<div class="src-note">Verified facts from the records</div>` : ""}</div>`;
   (p.blocks || []).forEach((b) => el.appendChild(renderBlock(b)));
   el.insertAdjacentHTML("beforeend", signalsHTML(p.flags));
+  el.insertAdjacentHTML("beforeend", verifyHTML(p.verification));
   (p.pending || []).forEach((pa) => el.appendChild(renderPending(pa)));
   if (p.citations?.length) {
     const mk = (c) => `<button class="${refClass(c.id)}" data-ref="${esc(c.id)}" title="${esc(c.label)}">${esc(c.id)}</button>`, N = 14;
@@ -290,6 +304,7 @@ function loadRules() {
 function setView(v) {
   $$(".view").forEach((x) => (x.hidden = x.id !== `view-${v}`)); $$(".rail-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   if (v === "audit") loadAudit().catch((e) => ($("#audit-body").innerHTML = `<div class="empty">${esc(e.message)}</div>`)); if (v === "rules") loadRules();
+  if (v === "eval") loadEval().catch((e) => ($("#eval-body").innerHTML = `<div class="empty">${esc(e.message)}</div>`));
 }
 async function init() {
   try { state.boot = await api("/api/bootstrap"); $("#live-dot").className = "dot on"; }

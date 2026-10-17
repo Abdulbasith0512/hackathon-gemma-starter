@@ -82,8 +82,8 @@ def find_date(A: Analyst, text: str) -> str | None:
         return None
 
 
-def route(A: Analyst, message: str) -> list[tuple[str, dict]] | None:
-    if wants_write_tools(message):  # a statement, correction or rule: only the model may interpret those
+def route(A: Analyst, message: str, force: bool = False) -> list[tuple[str, dict]] | None:
+    if not force and wants_write_tools(message):  # a statement, correction or rule: only the model may interpret those
         return None
     t = message.lower()
     scope, period, top_n = find_scope(A, message), find_period(message), find_top_n(message)
@@ -94,6 +94,9 @@ def route(A: Analyst, message: str) -> list[tuple[str, dict]] | None:
     mnt = re.search(r"\bMNT-\d{4}-\d{3}\b", message, re.I)
     if mnt and re.search(r"\bwho\b|technician|carried out|performed|did the (?:work|repair)", t):
         return [("maintenance_record", {"maintenance_id": mnt.group(0).upper()})]
+    if re.search(r"\bgas\b|h2s|rotten", t) and re.search(r"operator note|odou?r|smell", t) and re.search(r"response|someone out|in time|deadline", t):
+        since = re.search(r"since\s+(\d{1,2}\s+[a-z]{3,9})", t)
+        return [("gas_response", {"scope": scope or "all", "period": period, "start": find_date(A, since.group(1)) if since else None, "end": A.as_of_s if since else None})]
     if re.search(r"we discussed|discussed (?:yesterday|earlier|before)|talked about", t):
         return [("recall_discussed", {})] if "cost" not in t else None  # the cost step needs the recalled wells; leave to the model
     if re.search(r"\b(root[- ]cause|rca)\b", t):

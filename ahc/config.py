@@ -51,3 +51,12 @@ def get_db_path() -> Path:
 
 def get_memory_db_path() -> Path:
     return Path(os.getenv("AHC_MEMORY_DB", "").strip() or DATA_DIR / "ahc_memory.sqlite3")
+
+
+def get_audit_db_path(memory_path: Path | str | None = None) -> Path:
+    """The answer-audit log: AHC_AUDIT_DB, else next to the memory database (so a test or batch run with a temporary memory file never touches the real one)."""
+    raw = os.getenv("AHC_AUDIT_DB", "").strip()
+    if raw:
+        return Path(raw)
+    mem = Path(memory_path) if memory_path else get_memory_db_path()
+    return mem.with_name(mem.stem + "_audit" + mem.suffix)

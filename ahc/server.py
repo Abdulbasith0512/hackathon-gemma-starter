@@ -27,6 +27,7 @@ from . import ingest as ingest_mod
 from . import rules as rules_mod
 from .agent import Agent
 from .analyst import Analyst
+from .audit import AuditLog
 from .store import Store
 
 log = logging.getLogger("ahc")
@@ -51,15 +52,19 @@ class SettingsIn(BaseModel):
 class Runtime:
     """Shared state: the dataset database, the persistent memory store, rules and the as-of date."""
 
-    def __init__(self, roots, db_path, memory_path, as_of: date, llm=None):
+    def __init__(self, roots, db_path, memory_path, as_of: date, llm=None, audit_path=None):
         self.roots, self.db_path = list(roots), db_path
         self.stats = ingest_mod.ingest(self.roots, db_path)
         self.store = Store(memory_path)
         conn = db.connect(db_path)
         self.rules = rules_mod.load_rules(conn)
+        fp = conn.execute("SELECT value FROM meta WHERE key='fingerprint'").fetchone()
         conn.close()
         self.as_of, self.llm = as_of, llm
         self.lock = threading.Lock()
+        # which data the answers were checked against: an explicit label if given, else what was loaded
+        self.dataset_version = os.getenv("AHC_DATASET_VERSION", "").strip() or f"{self.stats.get('wells')} wells · {self.stats.get('inspections')} inspections · data {(fp[0] if fp else '')[:10]} · as-of {as_of}"
+        self.audit = AuditLog(audit_path or config.get_audit_db_path(memory_path), self.dataset_version)
 
     @contextmanager
     def session(self):
@@ -73,7 +78,7 @@ class Runtime:
         if self.llm is None:
             from .agent import GemmaLLM
             self.llm = GemmaLLM()
-        return Agent(analyst, self.store, self.llm)
+        return Agent(analyst, self.store, self.llm, audit=self.audit)
 
 
 def suggestions(A: Analyst) -> list[str]:
@@ -165,6 +170,11 @@ def create_app(roots=None, db_path=None, memory_path=None, as_of: date | None = 
         with rt.session() as A:
             return {"corrections": rt.store.all_corrections(), "rules": rt.store.all_scoped_rules(), "shared_notes": rt.store.all_shared_notes(),
                     "users": {u["user_id"]: u["name"] for u in A.users.values()}}
+
+    @app.get("/api/eval/report")
+    def eval_report(limit: int = Query(200, ge=1, le=1000)):
+        """Verification totals (PASS / FAIL / NEEDS_REVIEW) with every failed answer and its reasons. No user, conversation or memory data."""
+        return rt.audit.report(limit)
 
     @app.post("/api/settings")
     def settings(body: SettingsIn):
