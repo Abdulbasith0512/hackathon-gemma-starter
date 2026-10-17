@@ -5,18 +5,24 @@ so the code under test is not checking itself.
 """
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 from ahc import db, ingest, rules
 from ahc.agent import Agent, ground_check
 from ahc.analyst import Analyst
 from ahc.evidence import resolve
 from ahc.router import route
+from ahc.server import create_app
 from ahc.store import Store
 from tests import ahc_fixture
 from tests.test_ahc_agent import ALICE, ScriptedLLM
+from tests.test_ahc_golden import AS_OF as SAMPLE_AS_OF
+from tests.test_ahc_golden import SAMPLE
 
 MATCHED = "MNT-9001-001"       # technician U-2 (Bob Test)
 MISSING = "MNT-9002-001"       # technician_user_id set to null in this test
@@ -220,6 +226,102 @@ class ErrorTests(TechnicianCase):
             self.A.maintenance_record("MNT-0000-000")
         with self.assertRaises(ToolError):
             self.A.maintenance_record()
+
+
+class ToollessNameClaimTests(TechnicianCase):
+    def test_a_person_named_without_any_records_is_never_shown(self):
+        """A data question answered twice without a tool, naming a person but with no digit or record ID, used to be displayed as the model's answer."""
+        out = self.agent(("text", "Bob Test carried out that job."), ("text", "Bob Test carried out that job.")).respond(ALICE, None, "Who carried out this maintenance task?")
+        self.assertEqual(out["tool_calls"], [])
+        self.assertNotIn("Bob Test", out["answer"])
+        self.assertEqual(out["answer"], "I could not find an answer in the records.")
+
+
+@unittest.skipUnless((SAMPLE / "fleet").is_dir(), "official sample dataset not present in data/sample-data")
+class FollowUpSequenceOnTheSampleDataTests(unittest.TestCase):
+    """The two-turn sequence a user types in the app, through the HTTP API, conversation history, the agent loop, the tool, the evidence
+    and the grounding check, on the official sample data. Only the model is scripted, and it behaves as the real one did: on the
+    follow-up it first answers from memory (naming a contractor the records do not contain), then calls the tool when a call is required."""
+
+    TURN1, TURN2 = "show maintenance record MNT-0155-009", "Who carried out this maintenance task?"
+    CALL = ("call", "maintenance_record", {"maintenance_id": "MNT-0155-009"})
+    FROM_MEMORY = ("text", 'The maintenance task was carried out by the contractor "Alpine Services" [MNT-0155-009].')
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.base = Path(cls._tmp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def app(self, *steps):
+        self.llm = ScriptedLLM(*steps)
+        n = self.id().split(".")[-1]
+        app = create_app([SAMPLE], self.base / "api.sqlite3", self.base / f"mem-{n}.sqlite3", SAMPLE_AS_OF, self.llm)
+        self.addCleanup(app.state.rt.store.close)
+        return TestClient(app), app
+
+    def chat(self, client, message, conv=None):
+        r = client.post("/api/chat", json={"user_id": "U-201", "conv_id": conv, "message": message})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def test_the_follow_up_calls_the_tool_with_the_id_from_the_conversation_and_is_grounded(self):
+        client, app = self.app(self.CALL, ("text", "Maintenance record MNT-0155-009 was carried out by Brian Coleman (U-304) [MNT-0155-009]."),
+                               self.FROM_MEMORY, self.CALL, ("text", "Brian Coleman (U-304) carried out maintenance task MNT-0155-009 [MNT-0155-009]."))
+        first = self.chat(client, self.TURN1)
+        self.assertEqual([(c["name"], c["args"], c["ok"]) for c in first["tool_calls"]], [("maintenance_record", {"maintenance_id": "MNT-0155-009"}, True)])
+        out = self.chat(client, self.TURN2, first["conv_id"])
+
+        # the ID reached the model only through the stored conversation, and the answer from memory forced exactly one required call
+        history = " ".join(p.text for c in self.llm.sent[2].contents for p in c.parts if getattr(p, "text", None))
+        self.assertIn("MNT-0155-009", history)
+        self.assertEqual([s.forced for s in self.llm.sent[2:]], [False, True, False])
+
+        # the tool ran with that ID, and the answer is the model's wording, accepted by the grounding check
+        self.assertEqual([(c["name"], c["args"], c["ok"]) for c in out["tool_calls"]], [("maintenance_record", {"maintenance_id": "MNT-0155-009"}, True)])
+        self.assertEqual((out["answer_source"], out["warnings"]), ("model", []))
+        self.assertIn("Brian Coleman (U-304)", out["answer"])
+        self.assertNotIn("Alpine Services", out["answer"], "the claim made from memory is discarded")
+
+        # the technician is what an independent join of the two tables says
+        sql = sqlite3.connect(self.base / "api.sqlite3")
+        self.addCleanup(sql.close)
+        joined = sql.execute("SELECT m.technician_user_id, u.name FROM maintenance m LEFT JOIN users u ON m.technician_user_id = u.user_id WHERE m.maintenance_id = 'MNT-0155-009'").fetchone()
+        self.assertEqual(joined, ("U-304", "Brian Coleman"))
+
+        # citations: the maintenance record and its repair report
+        self.assertLessEqual({"MNT-0155-009", "report:MNT-0155-009"}, {c["id"] for c in out["citations"]})
+
+        # the grounding check, run again on the tool's own result: this answer passes, and the answer from memory is what it rejects
+        with app.state.rt.session() as A:
+            res = A.maintenance_record("MNT-0155-009")
+            people = [u["name"] for u in A.users.values()]
+        self.assertEqual(ground_check(out["answer"], [res], self.TURN2, people), [])
+        self.assertEqual(ground_check(self.FROM_MEMORY[1], [], self.TURN2, people), ["MNT-0155-009"])
+
+        # the evidence drawer and the source line agree
+        ev = client.get("/api/evidence", params={"ref": "MNT-0155-009"}).json()
+        self.assertEqual(dict(map(tuple, ev["fields"]))["Technician"], "Brian Coleman (U-304)")
+        path, line = ("assets/" + ev["source"].split(":")[0], int(ev["source"].split(":")[1]))
+        record = json.loads((SAMPLE / path).read_text(encoding="utf-8").splitlines()[line - 1])
+        self.assertEqual((record["maintenance_id"], record["technician_user_id"]), ("MNT-0155-009", "U-304"))
+
+        # both turns are in the one stored conversation
+        stored = client.get(f"/api/conversations/{first['conv_id']}", params={"user_id": "U-201"}).json()
+        self.assertEqual([m["role"] for m in stored], ["user", "assistant", "user", "assistant"])
+
+    def test_if_the_model_never_calls_the_tool_nothing_unsupported_is_shown(self):
+        """The failure the app showed before the fix, now the deliberate fail-safe: no records consulted means no answer, not a guess."""
+        client, _ = self.app(self.CALL, ("text", "Maintenance record MNT-0155-009 was carried out by Brian Coleman (U-304) [MNT-0155-009]."), self.FROM_MEMORY, self.FROM_MEMORY)
+        first = self.chat(client, self.TURN1)
+        out = self.chat(client, self.TURN2, first["conv_id"])
+        self.assertEqual(out["tool_calls"], [])
+        self.assertEqual(out["answer"], "I could not find an answer in the records.")
+        self.assertNotIn("Alpine Services", out["answer"])
+        self.assertEqual(out["citations"], [])
 
 
 if __name__ == "__main__":

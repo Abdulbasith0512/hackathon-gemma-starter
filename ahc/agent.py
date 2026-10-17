@@ -164,6 +164,11 @@ def _spelled_numbers(text: str) -> list[tuple[str, int, bool]]:
     return out
 
 
+def _names_in(text: str, names) -> list[str]:
+    """Which of the given people's names the text mentions."""
+    return [n for n in names if n and re.search(rf"(?<!\w){re.escape(n)}(?!\w)", text, re.I)]
+
+
 def ground_check(answer: str, results: list[dict], question: str = "", names: tuple | list = ()) -> list[str]:
     """Numbers and record IDs in `answer` that no tool result (or the question) contains. Empty means grounded.
 
@@ -178,7 +183,7 @@ def ground_check(answer: str, results: list[dict], question: str = "", names: tu
     allowed |= {str(v) for _p, v, _c in _spelled_numbers(blob)}
     text = re.sub(r"(?m)^\s*(?:\d+[.)]|[-*•])\s+", "", answer)
     bad = [cid for cid in set(_ID.findall(text)) if cid not in blob]
-    bad += [n for n in names if n and re.search(rf"(?<![\w]){re.escape(n)}(?![\w])", text, re.I) and n.lower() not in blob.lower()]
+    bad += [n for n in _names_in(text, names) if n.lower() not in blob.lower()]
     for num in set(_NUM.findall(re.sub(r"(?<=\d),(?=\d)", "", _ID.sub(" ", text)))):
         if num not in allowed:
             bad.append(num)
@@ -280,8 +285,8 @@ class Agent:
                     if not use_force and round_no == 0:
                         forced = True  # one more try, this time requiring a tool call
                         continue
-                    if re.search(r"\d", final_text) or _ID.search(final_text):
-                        final_text = None
+                    if re.search(r"\d", final_text) or _ID.search(final_text) or _names_in(final_text, [u["name"] for u in self.analyst.users.values() if u.get("name")]):
+                        final_text = None  # numbers, record IDs and people's names need records behind them
                 break
             contents.append(cand.content)
             answers = []
