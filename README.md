@@ -48,7 +48,7 @@ Replay a list of questions (corrections are saved automatically) and write the a
 Question ─► Gemma (picks a tool, fills its arguments)
               │
               ▼
-        22 deterministic tools ── ahc/analyst.py: the only code that does arithmetic
+        23 deterministic tools ── ahc/analyst.py: the only code that does arithmetic
               │      │
               │      └─ effective-value layer: dataset record + active corrections (originals kept)
               ▼
@@ -69,7 +69,7 @@ Question ─► Gemma (picks a tool, fills its arguments)
 
 | Requirement | Where |
 | --- | --- |
-| Chat over metadata, inspections, repairs, reports, regulator events, notes, manuals, SOPs | `ahc/ingest.py` loads all of it; 22 tools plus full-text search of manuals, SOPs and reports |
+| Chat over metadata, inspections, repairs, reports, regulator events, notes, manuals, SOPs | `ahc/ingest.py` loads all of it; 23 tools plus full-text search of manuals, SOPs and reports |
 | Right visual, explicit request respected | `ahc/visuals.py`; status card, table, line, bar, map, heatmap |
 | Cite exact records and documents | every tool returns citations; the evidence drawer opens the record or the manual section (`ahc/evidence.py`) |
 | Correct status, downtime, spills, costs, windows, compliance | `ahc/analyst.py`, `ahc/periods.py`, `ahc/rules.py`; golden tests against the official examples |
@@ -89,7 +89,7 @@ Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation
 ## Tests
 
 ```powershell
-.venv\Scripts\python.exe -m unittest discover        # 271 tests
+.venv\Scripts\python.exe -m unittest discover        # 292 tests
 ```
 
 - `tests/test_ahc_golden.py`, `test_ahc_memory.py`: the official sample dataset against the example scenarios (expected values live **only** in tests; skipped if `data/sample-data` is absent).
@@ -98,6 +98,7 @@ Signals shown on answers: **Corrected data**, **Conflict**, **Needs confirmation
 - `tests/test_ahc_router.py`: the built-in question patterns, the agent when the model is down, and the quota-aware retry.
 - `tests/test_ahc_ui.py`: the front-end files parse and are wired together.
 - `tests/test_ahc_lineage.py`: heatmap lineage reconciled against a raw-table recount and the source files, and proof that unsupported claims (digits, spelled-out numbers, invented IDs) cannot bypass verification.
+- `tests/test_ahc_technician.py`: who carried out a repair, for a matched technician, a missing technician ID and an ID with no matching user; a guessed name or user ID is rejected.
 - The original 124 starter tests (provider, thinking, images, retries, task framework) still pass.
 
 ## Limits worth knowing

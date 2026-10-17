@@ -16,6 +16,7 @@ from . import periods
 from .rules import Rules
 
 MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+MNT_SELECT = "SELECT m.*, u.name AS technician_name FROM maintenance m LEFT JOIN users u ON u.user_id = m.technician_user_id"
 REASON_WORDS = re.compile(r"shut[\s-]?in|shutdown|planned|workover|maintenance|repair|outage|offline|not producing|\bdown\b", re.I)
 CORRECTABLE = {"wellhead_temp_c", "ambient_temp_c", "spill_est_volume_bbl", "spill_area_pct", "spill_detected"}
 MAX_CITES = 400
@@ -86,6 +87,20 @@ class Analyst:
     # ---- names, scopes, periods -------------------------------------------------
     def user_name(self, uid: str | None) -> str:
         return self.users.get(uid or "", {}).get("name", uid or "unknown")
+
+    def technician(self, m: dict) -> dict:
+        """Who did a maintenance job, exactly as recorded. Never guesses: a missing ID, or an ID with no
+        matching user name, is reported as such. `m` comes from MNT_SELECT (which joins users)."""
+        uid = (m.get("technician_user_id") or "").strip() or None
+        name = m["technician_name"] if "technician_name" in m else self.users.get(uid or "", {}).get("name")
+        name = (name or "").strip() or None
+        if uid is None:
+            return {"user_id": None, "name": None, "status": "not_recorded", "label": "Not recorded",
+                    "text": "the technician is not recorded on this job"}
+        if name is None:
+            return {"user_id": uid, "name": None, "status": "unmatched", "label": f"{uid} (name not available)",
+                    "text": f"the record lists technician ID {uid}, but no user with that ID has a name, so who it is cannot be said"}
+        return {"user_id": uid, "name": name, "status": "recorded", "label": f"{name} ({uid})", "text": f"{name} ({uid})"}
 
     def well(self, asset_id: str) -> dict:
         m = re.search(r"(?i)well[-\s]?0*(\d+)", asset_id or "")
@@ -214,15 +229,15 @@ class Analyst:
     def maintenance(self, asset_ids: list[str], start: str | None = None, end: str | None = None) -> list[dict]:
         if not asset_ids:
             return []
-        q = f"SELECT * FROM maintenance WHERE asset_id IN ({','.join('?' * len(asset_ids))})"
+        q = f"{MNT_SELECT} WHERE m.asset_id IN ({','.join('?' * len(asset_ids))})"
         params: list = list(asset_ids)
         if start:
-            q += " AND started_date>=?"
+            q += " AND m.started_date>=?"
             params.append(start)
         if end:
-            q += " AND started_date<=?"
+            q += " AND m.started_date<=?"
             params.append(end)
-        return [dict(r) for r in self.c.execute(q + " ORDER BY asset_id, started_at", params)]
+        return [dict(r) for r in self.c.execute(q + " ORDER BY m.asset_id, m.started_at", params)]
 
     # ---- citations -----------------------------------------------------------
     def c_ins(self, cites: Cites, i: dict) -> str:
@@ -270,7 +285,7 @@ class Analyst:
         return out
 
     def open_repairs(self, asset_id: str, at: str) -> list[dict]:
-        rows = self.c.execute("SELECT * FROM maintenance WHERE asset_id=? AND started_at<=? AND completed_at>=? ORDER BY started_at", (asset_id, at, at)).fetchall()
+        rows = self.c.execute(f"{MNT_SELECT} WHERE m.asset_id=? AND m.started_at<=? AND m.completed_at>=? ORDER BY m.started_at", (asset_id, at, at)).fetchall()
         return [dict(r) for r in rows]
 
     def reasons(self, asset_id: str, ins: dict, cites: Cites) -> list[dict]:
@@ -839,7 +854,8 @@ class Analyst:
         if ins:
             self.c_ins(cites, ins)
             for m in self.open_repairs(aid, ins["inspected_at"]):
-                facts.append({"text": f"Open repair {m['maintenance_id']}: {m['issue']}, started {fmt_date(m['started_at'])}, planned end {fmt_date(m['completed_at'])}.", "cites": [self.c_mnt(cites, m)]})
+                t = self.technician(m)
+                facts.append({"text": f"Open repair {m['maintenance_id']}: {m['issue']}, started {fmt_date(m['started_at'])}, planned end {fmt_date(m['completed_at'])}; " + (f"technician: {t['text']}." if t["status"] == "recorded" else f"{t['text']}."), "cites": [self.c_mnt(cites, m)]})
         if not valid and not future:
             facts.append({"text": f"No notes or planned downtime are recorded for {aid}.", "cites": []})
             flags.append({"type": "missing_evidence", "text": f"No notes found for {aid}.", "refs": []})
@@ -900,7 +916,8 @@ class Analyst:
         return out
 
     def _report_for(self, inspection_id: str) -> dict | None:
-        m = self.c.execute("SELECT m.*, f.containment_hours, f.containment_quote, f.spill_class AS report_class, f.action_required FROM maintenance m "
+        m = self.c.execute("SELECT m.*, u.name AS technician_name, f.containment_hours, f.containment_quote, f.spill_class AS report_class, f.action_required FROM maintenance m "
+                           "LEFT JOIN users u ON u.user_id = m.technician_user_id "
                            "LEFT JOIN report_facts f ON f.maintenance_id=m.maintenance_id WHERE m.triggered_by_inspection_id=? ORDER BY m.started_at LIMIT 1", (inspection_id,)).fetchone()
         return dict(m) if m else None
 
@@ -941,7 +958,8 @@ class Analyst:
         rep = self._report_for(ins["inspection_id"])
         if rep:
             self.c_mnt(cites, rep)
-            facts.append({"text": f"A spill repair {rep['maintenance_id']} ({rep['issue']}) was carried out on {fmt_date(rep['started_at'])}.", "cites": [rep["maintenance_id"]]})
+            t = self.technician(rep)
+            facts.append({"text": f"A spill repair {rep['maintenance_id']} ({rep['issue']}) was carried out on {fmt_date(rep['started_at'])}; " + (f"technician: {t['text']}." if t["status"] == "recorded" else f"{t['text']}."), "cites": [rep["maintenance_id"]]})
             if rep.get("report_file"):
                 cites.add(f"report:{rep['maintenance_id']}", "report", f"Repair report {rep['maintenance_id']}")
         if not formal:
@@ -1156,17 +1174,47 @@ class Analyst:
         rows = []
         for m in top:
             self.c_mnt(cites, m)
-            rows.append([m["maintenance_id"], m["asset_id"], m["started_date"], m["maintenance_type"], (m["equipment_kind"] or "").replace("_", " "), m["issue"], round(m["cost_total"] or 0)])
+            rows.append([m["maintenance_id"], m["asset_id"], m["started_date"], m["maintenance_type"], (m["equipment_kind"] or "").replace("_", " "), m["issue"], round(m["cost_total"] or 0), self.technician(m)["label"]])
         desc = " ".join(x for x in (mt, eq.replace("_", " ") if eq else None, "repairs") if x)
         facts = [{"text": f"{len(ms)} {desc} in {label}, {per.label}, costing {usd(total)} in total (a repair belongs to the period of its start date).", "cites": []}]
         for r in rows[:5]:
-            facts.append({"text": f"{r[0]} on {r[1]} ({fmt_date(r[2])}, {r[3]}, {r[4]}): {r[5]}, {usd(r[6])}.", "cites": [r[0]]})
+            facts.append({"text": f"{r[0]} on {r[1]} ({fmt_date(r[2])}, {r[3]}, {r[4]}): {r[5]}, {usd(r[6])}; technician: {r[7]}.", "cites": [r[0]]})
         if by_kind:
             facts.append({"text": "Cost by equipment: " + "; ".join(f"{k.replace('_', ' ')} {usd(v)}" for k, v in sorted(by_kind.items(), key=lambda kv: -kv[1])) + ".", "cites": []})
         bar = {"kind": "bar", "title": f"Repair cost by equipment · {label} · {per.label}", "labels": [k.replace("_", " ") for k in by_kind], "values": [round(v) for v in by_kind.values()], "unit": "USD"}
         return self.result("repairs", f"Repairs in {label}", cites, window=per.as_dict(), data={"scope": label, "count": len(ms), "total_usd": total, "by_equipment": by_kind},
-                           facts=facts, visuals={"table": {"kind": "table", "columns": ["Repair", "Well", "Started", "Type", "Equipment", "Issue", "Cost (USD)"], "rows": rows}, "bar": bar}, natural="table",
+                           facts=facts, visuals={"table": {"kind": "table", "columns": ["Repair", "Well", "Started", "Type", "Equipment", "Issue", "Cost (USD)", "Technician"], "rows": rows}, "bar": bar}, natural="table",
                            entities={"wells": sorted({m["asset_id"] for m in top})})
+
+    def maintenance_record(self, maintenance_id: str | None = None, inspection_id: str | None = None) -> dict:
+        """One maintenance job and who carried it out (users joined on technician_user_id), cited to the job itself."""
+        if maintenance_id:
+            row = self.c.execute(f"{MNT_SELECT} WHERE m.maintenance_id=?", (re.sub(r"\s+", "", maintenance_id).upper(),)).fetchone()
+            if row is None:
+                raise ToolError(f"No maintenance record '{maintenance_id}'.")
+        elif inspection_id:
+            row = self.c.execute(f"{MNT_SELECT} WHERE m.triggered_by_inspection_id=? ORDER BY m.started_at LIMIT 1", (inspection_id.strip().upper(),)).fetchone()
+            if row is None:
+                raise ToolError(f"No maintenance job is recorded as triggered by {inspection_id}.")
+        else:
+            raise ToolError("Give a maintenance ID such as MNT-0155-002 (or the inspection that triggered the repair).")
+        m = dict(row)
+        t = self.technician(m)
+        cites = Cites()
+        ref = self.c_mnt(cites, m)
+        if m.get("report_file"):
+            cites.add(f"report:{m['maintenance_id']}", "report", f"Repair report {m['maintenance_id']}")
+        job = f"{m['maintenance_id']} ({m['maintenance_type']} {(m['equipment_kind'] or 'repair').replace('_', ' ')} on {m['asset_id']}, {m['issue']}, started {fmt_date(m['started_at'])})"
+        facts = [{"text": f"{job} was carried out by {t['name']} ({t['user_id']})." if t["status"] == "recorded" else f"{job}: {t['text']}.", "cites": [ref]}]
+        if m.get("contractor"):
+            facts.append({"text": f"The contractor recorded for {m['maintenance_id']} is {m['contractor'].rstrip('.')}.", "cites": [ref]})
+        flags = [] if t["status"] == "recorded" else [{"type": "missing_evidence", "text": t["text"][0].upper() + t["text"][1:] + ".", "refs": [ref]}]
+        shown = {"recorded": t["name"], "unmatched": "Name not available"}.get(t["status"], "Not recorded")
+        table = {"kind": "table", "columns": ["Repair", "Well", "Started", "Issue", "Technician ID", "Technician", "Contractor"],
+                 "rows": [[m["maintenance_id"], m["asset_id"], m["started_date"], m["issue"], m["technician_user_id"] or "—", shown, m.get("contractor") or "—"]]}
+        return self.result("maintenance_record", f"Who carried out {m['maintenance_id']}", cites,
+                           data={"maintenance_id": m["maintenance_id"], "asset_id": m["asset_id"], "technician_user_id": t["user_id"], "technician_name": t["name"], "technician_status": t["status"]},
+                           facts=facts, flags=flags, visuals={"table": table}, natural="table", entities={"wells": [m["asset_id"]]})
 
     def regulatory_events(self, scope: str | None = None, period: str | None = None, event_type: str | None = None, status: str | None = None,
                           start: str | None = None, end: str | None = None) -> dict:

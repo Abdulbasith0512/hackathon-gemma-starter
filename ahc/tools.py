@@ -256,6 +256,12 @@ def _repairs(ctx, a):
     return _call(ctx, "repairs", "repairs", a)
 
 
+@tool("maintenance_record", "Who carried out one maintenance job/repair (technician name from the user records), cited to the job. Give the maintenance ID, or the inspection ID that triggered the repair. Says so when the technician is not recorded.",
+      [("maintenance_id", "string", "Maintenance ID such as MNT-0155-002.", False), ("inspection_id", "string", "Inspection ID whose spill triggered the repair.", False)])
+def _maintenance_record(ctx, a):
+    return _call(ctx, "maintenance_record", "maintenance_record", a)
+
+
 @tool("regulatory_events", "Regulator events (spill reports, notices of violation, site inspections) and fines in a period for a well/area/field.",
       [SCOPE, PERIOD, ("event_type", "string", "spill_report_filed, notice_of_violation, site_inspection or nov_response_filed", False), ("status", "string", "open or closed", False), START, END])
 def _reg(ctx, a):

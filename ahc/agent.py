@@ -40,10 +40,10 @@ Rules:
 9. User says a value is wrong: propose_correction (never say saved before they confirm). Rule for a well type: propose_rule. Tells everyone something about a well: add_shared_note. States a well's current state: check_claim. Report any conflict returned.
 {extra}"""
 
-_ID = re.compile(r"\b(?:WELL|INS|MNT|REG|CTX|COR|SN|RULE|SR|RC|WS)-\d[\d-]*\b")
+_ID = re.compile(r"\b(?:WELL|INS|MNT|REG|CTX|COR|SN|RULE|SR|RC|WS|U)-\d[\d-]*\b")
 _NUM = re.compile(r"(?<![\w.#-])\d+(?:\.\d+)?")
 _ANYNUM = re.compile(r"\d+(?:\.\d+)?")
-_DATA_HINT = re.compile(r"\b(wells?|areas?|blocks?|spills?|downtime|down|repairs?|costs?|inspect\w*|producing|production|status|oil|reports?|regulator|rules?|breach\w*|violation\w*|fines?|notes?|correct\w*|measured|temperature|wellhead|map|chart|table|heat ?map|how many|which|show|list|compare|rank)\b|WELL-|\d", re.I)
+_DATA_HINT = re.compile(r"\b(wells?|areas?|blocks?|spills?|downtime|down|repairs?|costs?|inspect\w*|producing|production|status|oil|reports?|regulator|rules?|breach\w*|violation\w*|fines?|notes?|correct\w*|maintenance|technicians?|carried out|measured|temperature|wellhead|map|chart|table|heat ?map|how many|which|show|list|compare|rank)\b|WELL-|\d", re.I)
 _GREETING = re.compile(r"^\s*(hi|hello|hey|thanks|thank you|ok|okay|good (morning|afternoon|evening))\b[\s!.?]*$", re.I)
 
 
@@ -164,10 +164,12 @@ def _spelled_numbers(text: str) -> list[tuple[str, int, bool]]:
     return out
 
 
-def ground_check(answer: str, results: list[dict], question: str = "") -> list[str]:
+def ground_check(answer: str, results: list[dict], question: str = "", names: tuple | list = ()) -> list[str]:
     """Numbers and record IDs in `answer` that no tool result (or the question) contains. Empty means grounded.
 
-    IDs must appear exactly; numbers must appear as whole numbers (digits inside record IDs do not count).
+    IDs (including user IDs such as U-303) must appear exactly; numbers must appear as whole numbers (digits
+    inside record IDs do not count). `names` are people's names that may not be mentioned unless the evidence
+    names them, so a technician cannot be invented.
     Numbers spelled out in words are checked too when they are 20 or more, use 'hundred'/'thousand',
     or count something ("three wells"), so spelling a number out is not a way around the check.
     """
@@ -176,6 +178,7 @@ def ground_check(answer: str, results: list[dict], question: str = "") -> list[s
     allowed |= {str(v) for _p, v, _c in _spelled_numbers(blob)}
     text = re.sub(r"(?m)^\s*(?:\d+[.)]|[-*•])\s+", "", answer)
     bad = [cid for cid in set(_ID.findall(text)) if cid not in blob]
+    bad += [n for n in names if n and re.search(rf"(?<![\w]){re.escape(n)}(?![\w])", text, re.I) and n.lower() not in blob.lower()]
     for num in set(_NUM.findall(re.sub(r"(?<=\d),(?=\d)", "", _ID.sub(" ", text)))):
         if num not in allowed:
             bad.append(num)
@@ -302,7 +305,8 @@ class Agent:
         warnings = []
         source = "model"
         if final_text:
-            ungrounded = ground_check(final_text, ok, message)
+            people = [u["name"] for u in self.analyst.users.values() if u.get("name")] if any(r.get("tool") == "maintenance_record" for r in ok) else []
+            ungrounded = ground_check(final_text, ok, message, people)
             if ungrounded:
                 warnings.append("The model's wording contained values not found in the records (" + ", ".join(ungrounded[:6]) + "); showing the verified facts instead.")
                 final_text = None

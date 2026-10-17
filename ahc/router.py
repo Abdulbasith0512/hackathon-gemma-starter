@@ -91,6 +91,9 @@ def route(A: Analyst, message: str) -> list[tuple[str, dict]] | None:
     spill = "spill" in t
     visual_words = {"map": "map" in t, "heat": "heatmap" in t or "heat map" in t, "line": "line chart" in t or "line graph" in t}
 
+    mnt = re.search(r"\bMNT-\d{4}-\d{3}\b", message, re.I)
+    if mnt and re.search(r"\bwho\b|technician|carried out|performed|did the (?:work|repair)", t):
+        return [("maintenance_record", {"maintenance_id": mnt.group(0).upper()})]
     if re.search(r"we discussed|discussed (?:yesterday|earlier|before)|talked about", t):
         return [("recall_discussed", {})] if "cost" not in t else None  # the cost step needs the recalled wells; leave to the model
     if re.search(r"\b(root[- ]cause|rca)\b", t):

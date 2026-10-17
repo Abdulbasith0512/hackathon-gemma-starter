@@ -3,7 +3,7 @@
 import json
 import re
 
-from .analyst import Analyst, fmt_date
+from .analyst import MNT_SELECT, Analyst, fmt_date
 
 _SOP_PROTOCOL = re.compile(r"^[A-Z]{2,3}-\d{2}$")
 
@@ -45,12 +45,12 @@ def resolve(A: Analyst, ref: str) -> dict | None:
         return out
 
     if ref.startswith("MNT-"):
-        row = c.execute("SELECT * FROM maintenance WHERE maintenance_id=?", (ref,)).fetchone()
+        row = c.execute(f"{MNT_SELECT} WHERE m.maintenance_id=?", (ref,)).fetchone()
         if not row:
             return None
         out.update(kind="maintenance", title=f"Repair {ref}", subtitle=f"{row['asset_id']} · {row['equipment_kind']} · {row['maintenance_type']}", source=row["source"], raw=json.loads(row["raw"]))
         out["fields"] = [["Well", row["asset_id"]], ["Started", row["started_at"]], ["Completed / planned end", row["completed_at"]], ["Issue", row["issue"]], ["Action taken", row["action_taken"]],
-                         ["Technician", A.user_name(row["technician_user_id"])], ["Contractor", row["contractor"]], ["Downtime of this job (hours)", row["downtime_hours"]],
+                         ["Technician", A.technician(dict(row))["label"]], ["Contractor", row["contractor"]], ["Downtime of this job (hours)", row["downtime_hours"]],
                          ["Cost labor / parts / total (USD)", f"{row['cost_labor']} / {row['cost_parts']} / {row['cost_total']}"], ["Triggered by", row["triggered_by_inspection_id"]], ["Report file", row["report_file"]]]
         if row["triggered_by_inspection_id"]:
             out["related"].append(_rel(row["triggered_by_inspection_id"], "Triggering inspection"))
